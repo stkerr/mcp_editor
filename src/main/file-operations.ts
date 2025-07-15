@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
+import { app } from 'electron';
 import { MCPConfiguration, SubagentInfo } from '../shared/types';
 import { CONFIG_PATHS, SUBAGENT_DATA_PATHS } from '../shared/constants';
 
@@ -114,13 +115,14 @@ export async function detectInstalledApps(): Promise<string[]> {
 
 export async function readSubagentData(): Promise<SubagentInfo[]> {
   try {
-    const platform = getPlatform();
-    let dataPath = SUBAGENT_DATA_PATHS[platform];
+    let dataPath: string;
     
-    // Check if we're running from source (development mode)
-    // This checks if we're in the mcp_editor directory
-    if (__dirname.includes('mcp_editor') && !__dirname.includes('app.asar')) {
-      dataPath = join(__dirname, '../../dev-data/subagents.json');
+    if (!app.isPackaged) {
+      // Development mode - use dev-data directory
+      dataPath = join(app.getAppPath(), 'dev-data/subagents.json');
+    } else {
+      // Production mode - use userData directory
+      dataPath = join(app.getPath('userData'), 'subagents.json');
     }
     
     const resolvedPath = resolvePath(dataPath);
@@ -143,13 +145,14 @@ export async function readSubagentData(): Promise<SubagentInfo[]> {
 }
 
 export async function writeSubagentData(subagents: SubagentInfo[]): Promise<void> {
-  const platform = getPlatform();
-  let dataPath = SUBAGENT_DATA_PATHS[platform];
+  let dataPath: string;
   
-  // Check if we're running from source (development mode)
-  // This checks if we're in the mcp_editor directory
-  if (__dirname.includes('mcp_editor') && !__dirname.includes('app.asar')) {
-    dataPath = join(__dirname, '../../dev-data/subagents.json');
+  if (!app.isPackaged) {
+    // Development mode - use dev-data directory
+    dataPath = join(app.getAppPath(), 'dev-data/subagents.json');
+  } else {
+    // Production mode - use userData directory
+    dataPath = join(app.getPath('userData'), 'subagents.json');
   }
   
   const resolvedPath = resolvePath(dataPath);

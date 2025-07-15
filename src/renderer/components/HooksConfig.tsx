@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ClaudeCodeHooks } from '../../shared/types';
 import { Copy, Check, Download, Settings, AlertCircle } from 'lucide-react';
+import { WebhookTest } from './WebhookTest';
 
 interface HooksConfigProps {
   onConfigGenerated?: (config: ClaudeCodeHooks) => void;
@@ -10,19 +11,22 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   const [copied, setCopied] = useState(false);
   const [webhookPort, setWebhookPort] = useState('3001');
   const [appPath, setAppPath] = useState('');
-  const [isDevelopment, setIsDevelopment] = useState(true);
+  // Default to production mode unless we detect development environment
+  const [isDevelopment, setIsDevelopment] = useState(
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1'
+  );
 
   // Get the platform-specific app path
   const getDefaultAppPath = () => {
     if (isDevelopment) {
       // For development, use the webhook relay script
-      // In browser context, we can't access process.platform or env vars directly
-      // Use a sensible default based on the user's system
+      // Provide a generic example path
       const platform = navigator.platform.toLowerCase();
       if (platform.includes('win')) {
-        return 'C:\\Users\\YourUsername\\Code\\Personal\\mcp_editor\\webhook-relay.sh';
+        return 'path\\to\\mcp_editor\\webhook-relay.sh';
       } else {
-        return '/Users/stkerr/Code/Personal/mcp_editor/webhook-relay.sh';
+        return './webhook-relay.sh';
       }
     }
     
@@ -160,6 +164,8 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         </div>
       </div>
 
+      <WebhookTest webhookPort={webhookPort} />
+
       <div className="space-y-4">
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -277,6 +283,16 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
             <span>Start using subagents in Claude Code - their activity will appear in the Subagent Monitor</span>
           </li>
         </ol>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+        <h4 className="font-medium text-blue-800 mb-2">Troubleshooting Tips</h4>
+        <ul className="space-y-1 text-sm text-blue-700">
+          <li>• Use the test button above to verify webhook connectivity</li>
+          <li>• Ensure MCP Editor is running before using Claude Code subagents</li>
+          <li>• Check that port {webhookPort} is not blocked by firewall</li>
+          <li>• The app must be running to receive webhook events</li>
+        </ul>
       </div>
     </div>
   );

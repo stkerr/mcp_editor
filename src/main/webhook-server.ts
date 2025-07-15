@@ -71,6 +71,8 @@ export class WebhookServer {
         await this.handleWebhookEvent(req, res);
       } else if (req.method === 'GET' && pathname === '/health') {
         this.handleHealthCheck(res);
+      } else if (req.method === 'POST' && pathname === '/test') {
+        this.handleTestWebhook(res);
       } else {
         this.sendResponse(res, 404, { error: 'Not found' });
       }
@@ -301,6 +303,15 @@ export class WebhookServer {
       status: 'healthy', 
       timestamp: new Date().toISOString(),
       port: this.port
+    });
+  }
+
+  private handleTestWebhook(res: ServerResponse): void {
+    console.log('Test webhook endpoint called');
+    this.sendResponse(res, 200, { 
+      success: true,
+      message: 'Test webhook received',
+      timestamp: new Date().toISOString()
     });
   }
 
