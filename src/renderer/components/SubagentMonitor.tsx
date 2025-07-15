@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { SubagentInfo } from '../../shared/types';
-import { Activity, Clock, CheckCircle, XCircle, Zap, Settings, Trash2, ChevronRight } from 'lucide-react';
+import { Activity, Clock, CheckCircle, XCircle, Zap, Settings, Trash2, ChevronRight, ChevronDown, FolderOpen, Folder, GitBranch } from 'lucide-react';
 import { HooksConfig } from './HooksConfig';
 import { ErrorBoundary } from './ErrorBoundary';
 import { SubagentDetailsModal } from './SubagentDetailsModal';
+import { buildSubagentTree, getFlattenedTree, getSessionTreeSummary, SessionTree, SubagentTreeNode } from '../utils/subagent-tree';
 
 interface SubagentMonitorProps {
   refreshInterval?: number;
@@ -16,6 +17,9 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
   const [error, setError] = useState<string | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [selectedSubagent, setSelectedSubagent] = useState<SubagentInfo | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  console.log('SubagentMonitor render:', { selectedApp, loading, error, subagents: subagents.length });
 
   useEffect(() => {
     loadSubagents();
@@ -44,19 +48,23 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
   }, [refreshInterval]);
 
   const loadSubagents = async () => {
+    console.log('loadSubagents called, window.configAPI:', window.configAPI);
     try {
       if (window.configAPI?.getSubagents) {
         const result = await window.configAPI.getSubagents();
+        console.log('getSubagents result:', result);
         if (result.success) {
           setSubagents(result.data);
         } else {
           setError(result.error);
         }
       } else {
+        console.log('window.configAPI.getSubagents not available');
         // For now, show empty state with setup instructions
         setSubagents([]);
       }
     } catch (err) {
+      console.error('Error in loadSubagents:', err);
       setError('Failed to load subagent data');
     } finally {
       setLoading(false);
@@ -134,6 +142,7 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
 
   // Show message if not using Claude Code
   if (selectedApp !== 'code') {
+    console.log('SubagentMonitor: Not Claude Code app, showing message');
     return (
       <div className="text-center py-12">
         <Activity className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -152,6 +161,7 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
   }
 
   if (loading) {
+    console.log('SubagentMonitor: Loading state');
     return (
       <div className="flex justify-center py-12">
         <div className="text-muted-foreground">Loading subagent data...</div>
@@ -160,6 +170,7 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
   }
 
   if (error) {
+    console.log('SubagentMonitor: Error state:', error);
     return (
       <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
         <p className="text-destructive mb-2">{error}</p>
@@ -173,7 +184,96 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
     );
   }
 
+  // Function to render the tree structure
+  const renderSubagentTree = (nodes: SubagentTreeNode[], depth: number): React.ReactNode => {
+    return nodes.map(node => (
+      <div key={node.subagent.id} className="space-y-1">
+        <div 
+          className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
+            depth > 0 ? 'ml-' + (depth * 6) : ''
+          }`}
+          style={{ marginLeft: depth > 0 ? `${depth * 1.5}rem` : 0 }}
+          onClick={() => setSelectedSubagent(node.subagent)}
+        >
+          {/* Expand/Collapse for nodes with children */}
+          {node.children.length > 0 && (
+            <div 
+              className="flex-shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                const newExpanded = new Set(expandedNodes);
+                if (newExpanded.has(node.subagent.id)) {
+                  newExpanded.delete(node.subagent.id);
+                } else {
+                  newExpanded.add(node.subagent.id);
+                }
+                setExpandedNodes(newExpanded);
+              }}
+            >
+              {expandedNodes.has(node.subagent.id) ? (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              )}
+            </div>
+          )}
+
+          {/* Tree connector */}
+          {depth > 0 && (
+            <div className="flex-shrink-0">
+              <GitBranch className="w-4 h-4 text-muted-foreground" />
+            </div>
+          )}
+
+          {/* Status Icon */}
+          <div className="flex-shrink-0">
+            {getStatusIcon(node.subagent.status)}
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium text-sm truncate">
+                {node.subagent.description || `Subagent ${node.subagent.id.substring(0, 8)}`}
+              </h4>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(node.subagent.status)}`}>
+                {node.subagent.status}
+              </span>
+              {node.children.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ({node.children.length} sub-task{node.children.length !== 1 ? 's' : ''})
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {formatTime(node.subagent.startTime)}
+              </span>
+              <span className="font-mono">
+                {formatDuration(node.subagent.startTime, node.subagent.endTime)}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Indicator */}
+          <div className="flex-shrink-0">
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </div>
+
+        {/* Render children if expanded */}
+        {expandedNodes.has(node.subagent.id) && node.children.length > 0 && (
+          <div>
+            {renderSubagentTree(node.children, depth + 1)}
+          </div>
+        )}
+      </div>
+    ));
+  };
+
   if (subagents.length === 0) {
+    console.log('SubagentMonitor: No subagents, showSetup:', showSetup);
     if (showSetup) {
       return (
         <div>
@@ -233,56 +333,134 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
             <Zap className="w-4 h-4" />
             Auto-refreshing every {refreshInterval / 1000}s
           </div>
-          <button
-            onClick={clearSubagents}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-lg transition-colors"
-            title="Clear all subagent data"
-          >
-            <Trash2 className="w-4 h-4" />
-            Clear All
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const sessionTrees = buildSubagentTree(subagents, expandedNodes);
+                const allSessionIds = Array.from(sessionTrees.keys());
+                const expandedSessionCount = allSessionIds.filter(id => expandedNodes.has(id)).length;
+                
+                if (expandedSessionCount === allSessionIds.length) {
+                  // All expanded, collapse all
+                  setExpandedNodes(new Set());
+                } else {
+                  // Some collapsed, expand all sessions (not individual nodes)
+                  setExpandedNodes(new Set(allSessionIds));
+                }
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+              title="Expand/Collapse all sessions"
+            >
+              {(() => {
+                const sessionTrees = buildSubagentTree(subagents, expandedNodes);
+                const allSessionIds = Array.from(sessionTrees.keys());
+                const expandedSessionCount = allSessionIds.filter(id => expandedNodes.has(id)).length;
+                return expandedSessionCount === allSessionIds.length;
+              })() ? (
+                <>
+                  <ChevronDown className="w-4 h-4" />
+                  Collapse All
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="w-4 h-4" />
+                  Expand All
+                </>
+              )}
+            </button>
+            <button
+              onClick={clearSubagents}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-lg transition-colors"
+              title="Clear all subagent data"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear All
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="space-y-2">
-        {subagents
-          .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
-          .map((subagent) => (
-          <div 
-            key={subagent.id} 
-            className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-            onClick={() => setSelectedSubagent(subagent)}
-          >
-            {/* Status Icon */}
-            <div className="flex-shrink-0">
-              {getStatusIcon(subagent.status)}
+        {Array.from(buildSubagentTree(subagents, expandedNodes).entries())
+          .sort(([, a], [, b]) => {
+            // Sort sessions by most recent activity
+            const aLatest = Math.max(...a.roots.map(n => new Date(n.subagent.lastActivity).getTime()));
+            const bLatest = Math.max(...b.roots.map(n => new Date(n.subagent.lastActivity).getTime()));
+            return bLatest - aLatest;
+          })
+          .map(([sessionId, sessionTree]) => (
+          <div key={sessionId} className="space-y-1">
+            {/* Session Header */}
+            <div 
+              className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+              onClick={() => {
+                const newExpanded = new Set(expandedNodes);
+                if (newExpanded.has(sessionId)) {
+                  newExpanded.delete(sessionId);
+                } else {
+                  newExpanded.add(sessionId);
+                }
+                setExpandedNodes(newExpanded);
+              }}
+            >
+              {/* Expand/Collapse Icon */}
+              <div className="flex-shrink-0">
+                {expandedNodes.has(sessionId) ? (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+
+              {/* Session Icon */}
+              <div className="flex-shrink-0">
+                {expandedNodes.has(sessionId) ? (
+                  <FolderOpen className="w-4 h-4 text-primary" />
+                ) : (
+                  <Folder className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+
+              {/* Session Summary */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-medium text-sm truncate">
+                    {getSessionTreeSummary(sessionTree)}
+                  </h4>
+                  <div className="flex items-center gap-1">
+                    {sessionTree.activeCount > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full text-green-600 bg-green-100">
+                        {sessionTree.activeCount} active
+                      </span>
+                    )}
+                    {sessionTree.completedCount > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full text-blue-600 bg-blue-100">
+                        {sessionTree.completedCount} done
+                      </span>
+                    )}
+                    {sessionTree.failedCount > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full text-red-600 bg-red-100">
+                        {sessionTree.failedCount} failed
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    Session {sessionId.substring(0, 8)}
+                  </span>
+                  <span>{sessionTree.totalCount} task{sessionTree.totalCount !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h4 className="font-medium text-sm truncate">
-                  {subagent.description || `Subagent ${subagent.id.substring(0, 8)}`}
-                </h4>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(subagent.status)}`}>
-                  {subagent.status}
-                </span>
+            {/* Tree Structure (when expanded) */}
+            {expandedNodes.has(sessionId) && (
+              <div className="ml-4">
+                {renderSubagentTree(sessionTree.roots, 0)}
               </div>
-              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {formatTime(subagent.startTime)}
-                </span>
-                <span className="font-mono">
-                  {formatDuration(subagent.startTime, subagent.endTime)}
-                </span>
-              </div>
-            </div>
-
-            {/* Action Indicator */}
-            <div className="flex-shrink-0">
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </div>
+            )}
           </div>
         ))}
       </div>

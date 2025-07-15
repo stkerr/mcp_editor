@@ -46,3 +46,10 @@ export const subagentQueue = new SubagentQueue();
 export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
   return subagentQueue.add(subagent);
 }
+
+// Export a function to update parent-child relationships
+export async function updateSubagentParent(childId: string, parentId: string): Promise<void> {
+  // This would need to be implemented in file-operations.ts
+  // For now, we'll handle parent-child relationships when creating subagents
+  console.log(`Would update child ${childId} with parent ${parentId}`);
+}

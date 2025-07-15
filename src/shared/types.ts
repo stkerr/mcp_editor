@@ -34,6 +34,10 @@ export interface SubagentInfo {
   description?: string;
   toolsUsed: string[];
   lastActivity: Date;
+  // Parent-child relationship tracking
+  parentId?: string;
+  childIds: string[];
+  depth: number; // 0 for root tasks, 1 for direct children, etc.
   // Additional fields from webhook data
   totalDurationMs?: number;
   totalTokens?: number;
@@ -64,4 +68,17 @@ export interface ClaudeCodeHooks {
   Stop?: HookMatcher[];
   SubagentStop?: HookMatcher[];
   PreCompact?: HookMatcher[];
+}
+
+// Session grouping for hierarchical display
+export interface SubagentSession {
+  sessionId: string;
+  subagents: SubagentInfo[];
+  expanded: boolean;
+  firstSeen: Date;
+  lastActivity: Date;
+  totalDuration: number;
+  activeCount: number;
+  completedCount: number;
+  failedCount: number;
 }

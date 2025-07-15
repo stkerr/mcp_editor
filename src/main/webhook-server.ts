@@ -2,8 +2,9 @@ import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
 import { parse } from 'url';
 import { BrowserWindow } from 'electron';
 import { SubagentInfo } from '../shared/types';
-import { addSubagentInfo } from './subagent-queue';
+import { addSubagentInfo, updateSubagentParent } from './subagent-queue';
 import { IPC_CHANNELS } from '../shared/constants';
+import { SubagentTracker } from './subagent-tracker';
 
 interface WebhookEvent {
   sessionId: string;
@@ -17,9 +18,11 @@ interface WebhookEvent {
 export class WebhookServer {
   private server: Server | null = null;
   private port: number = 3001;
+  private subagentTracker: SubagentTracker;
 
   constructor(port: number = 3001) {
     this.port = port;
+    this.subagentTracker = new SubagentTracker();
   }
 
   async start(): Promise<void> {
@@ -228,6 +231,15 @@ export class WebhookServer {
       
       try {
         await addSubagentInfo(subagentInfo);
+        // Mark as completed in tracker (find by description match)
+        const activeSubagents = this.subagentTracker.getActiveSubagentsForSession(eventData.sessionId);
+        const matchingActive = activeSubagents.find(s => 
+          // Match based on timing - the subagent that is being completed
+          new Date(s.startTime).getTime() <= new Date(eventData.timestamp).getTime()
+        );
+        if (matchingActive) {
+          this.subagentTracker.completeSubagent(eventData.sessionId, matchingActive.id);
+        }
         console.log('Subagent completion processed successfully');
         this.notifyRenderer(subagentInfo);
       } catch (error) {
@@ -239,6 +251,12 @@ export class WebhookServer {
       const timestamp = Date.now();
       const uniqueId = `${eventData.sessionId}-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
       
+      // Determine parent-child relationship
+      const { parentId, depth } = this.subagentTracker.getParentForNewSubagent(
+        eventData.sessionId,
+        new Date(eventData.timestamp)
+      );
+      
       const subagentInfo: SubagentInfo = {
         id: uniqueId, // Unique ID for each subagent
         sessionId: eventData.sessionId,
@@ -247,17 +265,24 @@ export class WebhookServer {
         description: description,
         toolsUsed: this.extractToolsUsed(eventData),
         lastActivity: new Date(eventData.timestamp),
-        toolInput: eventData.toolInput
+        toolInput: eventData.toolInput,
+        parentId: parentId,
+        childIds: [],
+        depth: depth
       };
 
       console.log('Creating new subagent:', {
         id: uniqueId,
         description: description,
-        sessionId: eventData.sessionId
+        sessionId: eventData.sessionId,
+        parentId: parentId,
+        depth: depth
       });
       
       try {
         await addSubagentInfo(subagentInfo);
+        // Track this as an active subagent
+        this.subagentTracker.addActiveSubagent(subagentInfo);
         console.log('New subagent created successfully');
         this.notifyRenderer(subagentInfo);
       } catch (error) {

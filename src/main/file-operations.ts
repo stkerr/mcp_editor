@@ -129,12 +129,15 @@ export async function readSubagentData(): Promise<SubagentInfo[]> {
     const content = await fs.readFile(resolvedPath, 'utf-8');
     const data = JSON.parse(content);
     
-    // Convert date strings back to Date objects
+    // Convert date strings back to Date objects and add missing fields
     return data.map((subagent: any) => ({
       ...subagent,
       startTime: new Date(subagent.startTime),
       endTime: subagent.endTime ? new Date(subagent.endTime) : undefined,
-      lastActivity: new Date(subagent.lastActivity)
+      lastActivity: new Date(subagent.lastActivity),
+      // Add default values for new fields if missing
+      childIds: subagent.childIds || [],
+      depth: subagent.depth ?? 0
     }));
   } catch (error) {
     if ((error as any).code === 'ENOENT') {
@@ -255,8 +258,29 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
   
   // For new subagents or if no matching active subagent found
   if (!subagent.id.endsWith('-stop')) {
-    existingData.push(subagent);
-    console.log(`Added new subagent: ${subagent.description}`);
+    // Ensure new fields have default values
+    const subagentWithDefaults = {
+      ...subagent,
+      childIds: subagent.childIds || [],
+      depth: subagent.depth ?? 0
+    };
+    
+    // If this subagent has a parent, update the parent's childIds
+    if (subagentWithDefaults.parentId) {
+      const parent = existingData.find(s => s.id === subagentWithDefaults.parentId);
+      if (parent) {
+        if (!parent.childIds) {
+          parent.childIds = [];
+        }
+        if (!parent.childIds.includes(subagentWithDefaults.id)) {
+          parent.childIds.push(subagentWithDefaults.id);
+          console.log(`Added child ${subagentWithDefaults.id} to parent ${parent.id}`);
+        }
+      }
+    }
+    
+    existingData.push(subagentWithDefaults);
+    console.log(`Added new subagent: ${subagent.description} (depth: ${subagentWithDefaults.depth}, parent: ${subagentWithDefaults.parentId || 'none'})`);
   }
   
   // Keep only the last 100 entries to avoid file size issues
