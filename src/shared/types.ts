@@ -34,10 +34,6 @@ export interface SubagentInfo {
   description?: string;
   toolsUsed: string[];
   lastActivity: Date;
-  // Parent-child relationship tracking
-  parentId?: string;
-  childIds: string[];
-  depth: number; // 0 for root tasks, 1 for direct children, etc.
   // Additional fields from webhook data
   totalDurationMs?: number;
   totalTokens?: number;
@@ -70,10 +66,30 @@ export interface ClaudeCodeHooks {
   PreCompact?: HookMatcher[];
 }
 
+// Task grouping - represents related PreToolUse/PostToolUse events
+export interface TaskGroup {
+  description: string;
+  events: SubagentInfo[];  // Array of related events (typically PreToolUse and PostToolUse)
+  status: 'active' | 'completed' | 'failed';
+  startTime: Date;
+  endTime?: Date;
+  // Aggregated metrics
+  totalDurationMs?: number;
+  totalTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  toolUseCount?: number;
+  output?: string;
+  transcriptPath?: string;
+}
+
 // Session grouping for hierarchical display
 export interface SubagentSession {
   sessionId: string;
   subagents: SubagentInfo[];
+  taskGroups: TaskGroup[];  // New: grouped by description
   expanded: boolean;
   firstSeen: Date;
   lastActivity: Date;

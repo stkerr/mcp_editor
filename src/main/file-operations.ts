@@ -203,10 +203,10 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
         const descWords = matchDescription.toLowerCase().split(' ');
         matchingSubagent = existingData.find(s => {
           if (s.sessionId !== subagent.sessionId || s.status !== 'active') return false;
-          const sDescWords = s.description.toLowerCase().split(' ');
+          const sDescWords = (s.description || '').toLowerCase().split(' ');
           // Check if most significant words match
-          const significantWords = descWords.filter(w => w.length > 3);
-          const matches = significantWords.filter(w => sDescWords.includes(w));
+          const significantWords = descWords.filter((w: string) => w.length > 3);
+          const matches = significantWords.filter((w: string) => sDescWords.includes(w));
           return matches.length >= significantWords.length * 0.7; // 70% match threshold
         });
         
@@ -258,29 +258,8 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
   
   // For new subagents or if no matching active subagent found
   if (!subagent.id.endsWith('-stop')) {
-    // Ensure new fields have default values
-    const subagentWithDefaults = {
-      ...subagent,
-      childIds: subagent.childIds || [],
-      depth: subagent.depth ?? 0
-    };
-    
-    // If this subagent has a parent, update the parent's childIds
-    if (subagentWithDefaults.parentId) {
-      const parent = existingData.find(s => s.id === subagentWithDefaults.parentId);
-      if (parent) {
-        if (!parent.childIds) {
-          parent.childIds = [];
-        }
-        if (!parent.childIds.includes(subagentWithDefaults.id)) {
-          parent.childIds.push(subagentWithDefaults.id);
-          console.log(`Added child ${subagentWithDefaults.id} to parent ${parent.id}`);
-        }
-      }
-    }
-    
-    existingData.push(subagentWithDefaults);
-    console.log(`Added new subagent: ${subagent.description} (depth: ${subagentWithDefaults.depth}, parent: ${subagentWithDefaults.parentId || 'none'})`);
+    existingData.push(subagent);
+    console.log(`Added new subagent: ${subagent.description}`);
   }
   
   // Keep only the last 100 entries to avoid file size issues

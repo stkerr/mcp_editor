@@ -8,17 +8,18 @@ const IPC_CHANNELS = {
   CONFIG_ERROR: 'config:error',
   GET_SUBAGENTS: 'subagents:get',
   SAVE_SUBAGENT: 'subagents:save',
-  CLEAR_SUBAGENTS: 'subagents:clear'
+  CLEAR_SUBAGENTS: 'subagents:clear',
+  SUBAGENT_UPDATE: 'subagents:update'
 };
 
 const configAPI = {
-  loadConfig: (appType) => 
+  loadConfig: (appType: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.LOAD_CONFIG, appType),
   
-  saveConfig: (appType, config) => 
+  saveConfig: (appType: any, config: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, appType, config),
   
-  validateConfig: (config) => 
+  validateConfig: (config: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.VALIDATE_CONFIG, config),
   
   detectApps: () => 
@@ -27,14 +28,14 @@ const configAPI = {
   getSubagents: () => 
     ipcRenderer.invoke(IPC_CHANNELS.GET_SUBAGENTS),
   
-  saveSubagent: (subagent) => 
+  saveSubagent: (subagent: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.SAVE_SUBAGENT, subagent),
   
   clearSubagents: () => 
     ipcRenderer.invoke(IPC_CHANNELS.CLEAR_SUBAGENTS),
   
-  onSubagentUpdate: (callback) => {
-    const handler = (event, data) => callback(data);
+  onSubagentUpdate: (callback: any) => {
+    const handler = (event: any, data: any) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.SUBAGENT_UPDATE, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SUBAGENT_UPDATE, handler);
   }

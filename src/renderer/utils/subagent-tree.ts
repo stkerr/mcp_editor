@@ -1,14 +1,18 @@
-import { SubagentInfo } from '../../shared/types';
+import { SubagentInfo, TaskGroup } from '../../shared/types';
 
 export interface SubagentTreeNode {
   subagent: SubagentInfo;
-  children: SubagentTreeNode[];
+}
+
+export interface TaskGroupNode {
+  taskGroup: TaskGroup;
   expanded: boolean;
 }
 
 export interface SessionTree {
   sessionId: string;
-  roots: SubagentTreeNode[];
+  subagents: SubagentTreeNode[];  // Keep for backward compatibility
+  taskGroups: TaskGroupNode[];     // New: grouped by description
   expanded: boolean;
   totalCount: number;
   activeCount: number;
@@ -17,34 +21,92 @@ export interface SessionTree {
 }
 
 /**
- * Build a tree structure from flat subagent list
+ * Create task groups from subagents based on description
+ */
+function createTaskGroups(subagents: SubagentInfo[], expandedNodes: Set<string>): TaskGroupNode[] {
+  const taskGroupMap = new Map<string, TaskGroup>();
+  
+  // Group subagents by description
+  subagents.forEach(subagent => {
+    const description = subagent.description || 'Unnamed Task';
+    
+    if (!taskGroupMap.has(description)) {
+      taskGroupMap.set(description, {
+        description,
+        events: [],
+        status: 'active',
+        startTime: subagent.startTime,
+        endTime: undefined
+      });
+    }
+    
+    const taskGroup = taskGroupMap.get(description)!;
+    taskGroup.events.push(subagent);
+    
+    // Update task group based on events
+    // If we have a completed event, the task group is completed
+    const hasCompletedEvent = taskGroup.events.some(e => e.status === 'completed');
+    const hasFailedEvent = taskGroup.events.some(e => e.status === 'failed');
+    
+    if (hasCompletedEvent) {
+      taskGroup.status = 'completed';
+      // Find the latest end time from completed events
+      const completedEvents = taskGroup.events.filter(e => e.status === 'completed' && e.endTime);
+      if (completedEvents.length > 0) {
+        const latestEndTime = completedEvents
+          .map(e => new Date(e.endTime!).getTime())
+          .reduce((a, b) => Math.max(a, b), 0);
+        taskGroup.endTime = new Date(latestEndTime);
+        
+        // Aggregate metrics from the completed event
+        const completedEvent = completedEvents[completedEvents.length - 1];
+        taskGroup.totalDurationMs = completedEvent.totalDurationMs;
+        taskGroup.totalTokens = completedEvent.totalTokens;
+        taskGroup.inputTokens = completedEvent.inputTokens;
+        taskGroup.outputTokens = completedEvent.outputTokens;
+        taskGroup.cacheCreationTokens = completedEvent.cacheCreationTokens;
+        taskGroup.cacheReadTokens = completedEvent.cacheReadTokens;
+        taskGroup.toolUseCount = completedEvent.toolUseCount;
+        taskGroup.output = completedEvent.output;
+        taskGroup.transcriptPath = completedEvent.transcriptPath;
+      }
+    } else if (hasFailedEvent) {
+      taskGroup.status = 'failed';
+    }
+    
+    // Update start time to be the earliest
+    const earliestStart = taskGroup.events
+      .map(e => new Date(e.startTime).getTime())
+      .reduce((a, b) => Math.min(a, b), new Date(taskGroup.startTime).getTime());
+    taskGroup.startTime = new Date(earliestStart);
+  });
+  
+  // Convert to array and sort by start time
+  return Array.from(taskGroupMap.values())
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+    .map(taskGroup => ({
+      taskGroup,
+      expanded: expandedNodes.has(`task-${taskGroup.description}`),
+    }));
+}
+
+/**
+ * Build a hierarchical structure organized by session and task description
  */
 export function buildSubagentTree(
   subagents: SubagentInfo[], 
   expandedNodes: Set<string>
 ): Map<string, SessionTree> {
   const sessionMap = new Map<string, SessionTree>();
-  const nodeMap = new Map<string, SubagentTreeNode>();
   
-  // First pass: create all nodes
+  // Organize subagents by session
   subagents.forEach(subagent => {
-    const node: SubagentTreeNode = {
-      subagent,
-      children: [],
-      expanded: expandedNodes.has(subagent.id)
-    };
-    nodeMap.set(subagent.id, node);
-  });
-  
-  // Second pass: build tree structure and organize by session
-  subagents.forEach(subagent => {
-    const node = nodeMap.get(subagent.id)!;
-    
     // Get or create session tree
     if (!sessionMap.has(subagent.sessionId)) {
       sessionMap.set(subagent.sessionId, {
         sessionId: subagent.sessionId,
-        roots: [],
+        subagents: [],
+        taskGroups: [],
         expanded: expandedNodes.has(subagent.sessionId),
         totalCount: 0,
         activeCount: 0,
@@ -69,29 +131,23 @@ export function buildSubagentTree(
         break;
     }
     
-    // Add to parent or root
-    if (subagent.parentId) {
-      const parent = nodeMap.get(subagent.parentId);
-      if (parent) {
-        parent.children.push(node);
-        // Sort children by start time
-        parent.children.sort((a, b) => 
-          new Date(a.subagent.startTime).getTime() - new Date(b.subagent.startTime).getTime()
-        );
-      } else {
-        // Parent not found, add as root
-        sessionTree.roots.push(node);
-      }
-    } else {
-      // No parent, this is a root
-      sessionTree.roots.push(node);
-    }
+    // Create node and add to session
+    const node: SubagentTreeNode = {
+      subagent
+    };
+    sessionTree.subagents.push(node);
   });
   
-  // Sort roots by start time
+  // Sort subagents by start time within each session and create task groups
   sessionMap.forEach(sessionTree => {
-    sessionTree.roots.sort((a, b) => 
+    sessionTree.subagents.sort((a, b) => 
       new Date(a.subagent.startTime).getTime() - new Date(b.subagent.startTime).getTime()
+    );
+    
+    // Create task groups for this session
+    sessionTree.taskGroups = createTaskGroups(
+      sessionTree.subagents.map(n => n.subagent),
+      expandedNodes
     );
   });
   
@@ -99,44 +155,30 @@ export function buildSubagentTree(
 }
 
 /**
- * Get a flattened list of visible nodes for rendering
+ * Get subagents for a session (no longer needs flattening)
  */
-export function getFlattenedTree(
-  sessionTree: SessionTree,
-  expandedNodes: Set<string>
+export function getSessionSubagents(
+  sessionTree: SessionTree
 ): SubagentTreeNode[] {
-  const result: SubagentTreeNode[] = [];
-  
-  function addNode(node: SubagentTreeNode, depth: number = 0) {
-    result.push(node);
-    
-    // Only add children if this node is expanded
-    if (expandedNodes.has(node.subagent.id)) {
-      node.children.forEach(child => addNode(child, depth + 1));
-    }
-  }
-  
-  sessionTree.roots.forEach(root => addNode(root));
-  
-  return result;
+  return sessionTree.subagents;
 }
 
 /**
  * Get session summary for collapsed view
  */
 export function getSessionTreeSummary(sessionTree: SessionTree): string {
-  if (sessionTree.roots.length === 0) {
+  if (sessionTree.subagents.length === 0) {
     return `Session ${sessionTree.sessionId.substring(0, 8)}`;
   }
   
-  // Find the most descriptive root task
-  const descriptions = sessionTree.roots
+  // Find the most descriptive task
+  const descriptions = sessionTree.subagents
     .map(node => node.subagent.description)
     .filter(Boolean);
     
   if (descriptions.length > 0) {
-    const longestDesc = descriptions.reduce((a, b) => a.length > b.length ? a : b);
-    return longestDesc;
+    const longestDesc = descriptions.reduce((a, b) => (a?.length || 0) > (b?.length || 0) ? a : b);
+    return longestDesc || `Session ${sessionTree.sessionId.substring(0, 8)}`;
   }
   
   return `Session ${sessionTree.sessionId.substring(0, 8)}`;

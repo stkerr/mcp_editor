@@ -89,11 +89,11 @@ export function getSessionSummary(session: SubagentSession): string {
     
   if (descriptions.length > 0) {
     // Find the longest description as it's likely most descriptive
-    const longestDesc = descriptions.reduce((a, b) => a.length > b.length ? a : b);
+    const longestDesc = descriptions.reduce((a, b) => (a?.length || 0) > (b?.length || 0) ? a : b);
     if (totalTasks > 1) {
       return `${longestDesc}`;
     }
-    return longestDesc;
+    return longestDesc || `Session ${session.sessionId.substring(0, 8)}`;
   }
   
   return `Session ${session.sessionId.substring(0, 8)}`;

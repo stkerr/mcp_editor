@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { SubagentInfo } from '../../shared/types';
-import { Activity, Clock, CheckCircle, XCircle, Zap, Settings, Trash2, ChevronRight, ChevronDown, FolderOpen, Folder, GitBranch } from 'lucide-react';
+import { SubagentInfo, TaskGroup } from '../../shared/types';
+import { Activity, Clock, CheckCircle, XCircle, Zap, Settings, Trash2, ChevronRight, ChevronDown, FolderOpen, Folder, FileText } from 'lucide-react';
 import { HooksConfig } from './HooksConfig';
 import { ErrorBoundary } from './ErrorBoundary';
 import { SubagentDetailsModal } from './SubagentDetailsModal';
-import { buildSubagentTree, getFlattenedTree, getSessionTreeSummary, SessionTree, SubagentTreeNode } from '../utils/subagent-tree';
+import { buildSubagentTree, getSessionSubagents, getSessionTreeSummary, SessionTree, SubagentTreeNode, TaskGroupNode } from '../utils/subagent-tree';
 
 interface SubagentMonitorProps {
   refreshInterval?: number;
@@ -184,92 +184,156 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
     );
   }
 
-  // Function to render the tree structure
-  const renderSubagentTree = (nodes: SubagentTreeNode[], depth: number): React.ReactNode => {
+  // Function to render subagents as a flat list
+  const renderSubagents = (nodes: SubagentTreeNode[]): React.ReactNode => {
     return nodes.map(node => (
-      <div key={node.subagent.id} className="space-y-1">
-        <div 
-          className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
-            depth > 0 ? 'ml-' + (depth * 6) : ''
-          }`}
-          style={{ marginLeft: depth > 0 ? `${depth * 1.5}rem` : 0 }}
-          onClick={() => setSelectedSubagent(node.subagent)}
-        >
-          {/* Expand/Collapse for nodes with children */}
-          {node.children.length > 0 && (
-            <div 
-              className="flex-shrink-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                const newExpanded = new Set(expandedNodes);
-                if (newExpanded.has(node.subagent.id)) {
-                  newExpanded.delete(node.subagent.id);
-                } else {
-                  newExpanded.add(node.subagent.id);
-                }
-                setExpandedNodes(newExpanded);
-              }}
-            >
-              {expandedNodes.has(node.subagent.id) ? (
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              )}
-            </div>
-          )}
+      <div 
+        key={node.subagent.id}
+        className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+        onClick={() => setSelectedSubagent(node.subagent)}
+      >
+        {/* Status Icon */}
+        <div className="flex-shrink-0">
+          {getStatusIcon(node.subagent.status)}
+        </div>
 
-          {/* Tree connector */}
-          {depth > 0 && (
-            <div className="flex-shrink-0">
-              <GitBranch className="w-4 h-4 text-muted-foreground" />
-            </div>
-          )}
-
-          {/* Status Icon */}
-          <div className="flex-shrink-0">
-            {getStatusIcon(node.subagent.status)}
+        {/* Main Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h4 className="font-medium text-sm truncate">
+              {node.subagent.description || `Subagent ${node.subagent.id.substring(0, 8)}`}
+            </h4>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(node.subagent.status)}`}>
+              {node.subagent.status}
+            </span>
           </div>
-
-          {/* Main Content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h4 className="font-medium text-sm truncate">
-                {node.subagent.description || `Subagent ${node.subagent.id.substring(0, 8)}`}
-              </h4>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(node.subagent.status)}`}>
-                {node.subagent.status}
-              </span>
-              {node.children.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  ({node.children.length} sub-task{node.children.length !== 1 ? 's' : ''})
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {formatTime(node.subagent.startTime)}
-              </span>
-              <span className="font-mono">
-                {formatDuration(node.subagent.startTime, node.subagent.endTime)}
-              </span>
-            </div>
-          </div>
-
-          {/* Action Indicator */}
-          <div className="flex-shrink-0">
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatTime(node.subagent.startTime)}
+            </span>
+            <span className="font-mono">
+              {formatDuration(node.subagent.startTime, node.subagent.endTime)}
+            </span>
           </div>
         </div>
 
-        {/* Render children if expanded */}
-        {expandedNodes.has(node.subagent.id) && node.children.length > 0 && (
-          <div>
-            {renderSubagentTree(node.children, depth + 1)}
-          </div>
-        )}
+        {/* Action Indicator */}
+        <div className="flex-shrink-0">
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        </div>
       </div>
     ));
+  };
+
+  // Function to render task groups (grouped by description)
+  const renderTaskGroups = (taskGroups: TaskGroupNode[]): React.ReactNode => {
+    return taskGroups.map(({ taskGroup, expanded }) => {
+      const taskKey = `task-${taskGroup.description}`;
+      const hasMultipleEvents = taskGroup.events.length > 1;
+      
+      return (
+        <div key={taskKey} className="ml-4 space-y-1">
+          {/* Task Group Header */}
+          <div 
+            className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+            onClick={() => {
+              if (hasMultipleEvents) {
+                const newExpanded = new Set(expandedNodes);
+                if (newExpanded.has(taskKey)) {
+                  newExpanded.delete(taskKey);
+                } else {
+                  newExpanded.add(taskKey);
+                }
+                setExpandedNodes(newExpanded);
+              } else {
+                // If single event, show details directly
+                setSelectedSubagent(taskGroup.events[0]);
+              }
+            }}
+          >
+            {/* Expand/Collapse Icon (only if multiple events) */}
+            {hasMultipleEvents && (
+              <div className="flex-shrink-0">
+                {expandedNodes.has(taskKey) ? (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+            )}
+
+            {/* Status Icon */}
+            <div className="flex-shrink-0">
+              {getStatusIcon(taskGroup.status)}
+            </div>
+
+            {/* Task Icon */}
+            <div className="flex-shrink-0">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="font-medium text-sm truncate">
+                  {taskGroup.description}
+                </h4>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(taskGroup.status)}`}>
+                  {taskGroup.status}
+                </span>
+                {hasMultipleEvents && (
+                  <span className="text-xs text-muted-foreground">
+                    ({taskGroup.events.length} events)
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {formatTime(taskGroup.startTime)}
+                </span>
+                <span className="font-mono">
+                  {formatDuration(taskGroup.startTime, taskGroup.endTime)}
+                </span>
+                {taskGroup.totalTokens && (
+                  <span>
+                    {taskGroup.totalTokens} tokens
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Action Indicator */}
+            <div className="flex-shrink-0">
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+
+          {/* Individual Events (when expanded) */}
+          {hasMultipleEvents && expandedNodes.has(taskKey) && (
+            <div className="ml-8 space-y-2">
+              {taskGroup.events.map(event => (
+                <div 
+                  key={event.id}
+                  className="flex items-center gap-3 p-2 border rounded-lg hover:bg-muted/30 cursor-pointer transition-colors text-sm"
+                  onClick={() => setSelectedSubagent(event)}
+                >
+                  <div className="flex-shrink-0">
+                    {getStatusIcon(event.status)}
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-muted-foreground">
+                      {event.status === 'active' ? 'Started' : 'Completed'} at {formatTime(event.startTime)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    });
   };
 
   if (subagents.length === 0) {
@@ -384,8 +448,8 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
         {Array.from(buildSubagentTree(subagents, expandedNodes).entries())
           .sort(([, a], [, b]) => {
             // Sort sessions by most recent activity
-            const aLatest = Math.max(...a.roots.map(n => new Date(n.subagent.lastActivity).getTime()));
-            const bLatest = Math.max(...b.roots.map(n => new Date(n.subagent.lastActivity).getTime()));
+            const aLatest = Math.max(...a.subagents.map(n => new Date(n.subagent.lastActivity).getTime()));
+            const bLatest = Math.max(...b.subagents.map(n => new Date(n.subagent.lastActivity).getTime()));
             return bLatest - aLatest;
           })
           .map(([sessionId, sessionTree]) => (
@@ -455,10 +519,10 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
               </div>
             </div>
 
-            {/* Tree Structure (when expanded) */}
+            {/* Task groups list (when expanded) */}
             {expandedNodes.has(sessionId) && (
-              <div className="ml-4">
-                {renderSubagentTree(sessionTree.roots, 0)}
+              <div className="space-y-2">
+                {renderTaskGroups(sessionTree.taskGroups)}
               </div>
             )}
           </div>
