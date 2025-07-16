@@ -11,7 +11,8 @@ const IPC_CHANNELS = {
   GET_SUBAGENTS: 'subagents:get',
   SAVE_SUBAGENT: 'subagents:save',
   CLEAR_SUBAGENTS: 'subagents:clear',
-  SUBAGENT_UPDATE: 'subagents:update'
+  SUBAGENT_UPDATE: 'subagents:update',
+  APPLY_HOOKS_TO_CONFIG: 'config:apply-hooks'
 };
 
 const configAPI = {
@@ -46,7 +47,10 @@ const configAPI = {
     const handler = (event: any, data: any) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.SUBAGENT_UPDATE, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SUBAGENT_UPDATE, handler);
-  }
+  },
+  
+  applyHooksToConfig: (hooks: any) => 
+    ipcRenderer.invoke(IPC_CHANNELS.APPLY_HOOKS_TO_CONFIG, hooks)
 };
 
 contextBridge.exposeInMainWorld('configAPI', configAPI);

@@ -2,6 +2,15 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { setupConfigHandlers } from './config-manager';
 import { WebhookServer } from './webhook-server';
+import { 
+  getClaudeCodeConfigPath,
+  readClaudeCodeConfig,
+  mergeHooksConfiguration,
+  createConfigBackup,
+  writeClaudeCodeConfig
+} from './hooks-config-helpers';
+import { IPC_CHANNELS } from '../shared/constants';
+import { ClaudeCodeHooks } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
 let webhookServer: WebhookServer | null = null;
@@ -93,6 +102,37 @@ if (handleWebhookArgument()) {
 
   app.whenReady().then(async () => {
     setupConfigHandlers();
+    
+    // Handle apply-hooks-to-config IPC
+    ipcMain.handle(IPC_CHANNELS.APPLY_HOOKS_TO_CONFIG, async (_, newHooks: ClaudeCodeHooks) => {
+      try {
+        // 1. Read existing config
+        const configPath = getClaudeCodeConfigPath();
+        const existingConfig = await readClaudeCodeConfig();
+        
+        // 2. Merge new hooks configuration
+        const mergedConfig = mergeHooksConfiguration(existingConfig, newHooks);
+        
+        // 3. Create backup
+        const backupPath = await createConfigBackup(configPath);
+        
+        // 4. Write updated config
+        await writeClaudeCodeConfig(configPath, mergedConfig);
+        
+        // 5. Return success status with backup path
+        return { 
+          success: true, 
+          message: 'Hooks configuration successfully applied',
+          backupPath: backupPath || undefined
+        };
+      } catch (error) {
+        // Return error status
+        return { 
+          success: false, 
+          error: `Failed to apply hooks configuration: ${(error as Error).message}` 
+        };
+      }
+    });
     
     // Start webhook server
     try {

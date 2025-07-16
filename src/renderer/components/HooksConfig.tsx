@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ClaudeCodeHooks } from '../../shared/types';
-import { Copy, Check, Download, Settings, AlertCircle } from 'lucide-react';
+import { Copy, Check, Download, Settings, AlertCircle, Save } from 'lucide-react';
 import { WebhookTest } from './WebhookTest';
 
 interface HooksConfigProps {
@@ -9,8 +9,10 @@ interface HooksConfigProps {
 
 export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   const [copied, setCopied] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const [webhookPort, setWebhookPort] = useState('3001');
   const [appPath, setAppPath] = useState('');
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   // Default to production mode unless we detect development environment
   const [isDevelopment, setIsDevelopment] = useState(
     window.location.hostname === 'localhost' || 
@@ -121,6 +123,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   };
 
   const hooksConfig = generateHooksConfig();
+  const isConfigEmpty = Object.keys(hooksConfig).length === 0;
 
   const handleCopy = async () => {
     try {
@@ -149,8 +152,66 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
     onConfigGenerated?.(hooksConfig);
   };
 
+  const handleApplyToConfig = async () => {
+    try {
+      setIsApplying(true);
+      setNotification(null);
+      
+      if (!window.configAPI?.applyHooksToConfig) {
+        throw new Error('API not available');
+      }
+      
+      const result = await window.configAPI.applyHooksToConfig(hooksConfig);
+      
+      if (result.success) {
+        setNotification({
+          type: 'success',
+          message: `Hooks applied successfully! Backup saved at: ${result.backupPath}`
+        });
+        // Clear success notification after 5 seconds
+        setTimeout(() => setNotification(null), 5000);
+      } else {
+        setNotification({
+          type: 'error',
+          message: result.error || 'Failed to apply hooks configuration'
+        });
+      }
+      
+      onConfigGenerated?.(hooksConfig);
+    } catch (err) {
+      console.error('Failed to apply hooks to config:', err);
+      setNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to apply hooks configuration'
+      });
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {notification && (
+        <div className={`border rounded-lg p-4 ${
+          notification.type === 'success' 
+            ? 'bg-green-50 border-green-200' 
+            : 'bg-red-50 border-red-200'
+        }`}>
+          <div className="flex items-start gap-3">
+            {notification.type === 'success' ? (
+              <Check className="w-5 h-5 text-green-600 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+            )}
+            <p className={`text-sm ${
+              notification.type === 'success' ? 'text-green-700' : 'text-red-700'
+            }`}>
+              {notification.message}
+            </p>
+          </div>
+        </div>
+      )}
+      
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
@@ -252,6 +313,14 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
               <Download className="w-3 h-3" />
               Download
             </button>
+            <button
+              onClick={handleApplyToConfig}
+              disabled={isConfigEmpty || isApplying}
+              className="flex items-center gap-1 px-3 py-1 text-sm bg-background border rounded hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-3 h-3" />
+              {isApplying ? 'Applying...' : 'Apply to Config'}
+            </button>
           </div>
         </div>
         <pre className="p-4 text-sm font-mono bg-background overflow-x-auto">
@@ -264,22 +333,18 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         <ol className="space-y-2 text-sm">
           <li className="flex gap-2">
             <span className="font-mono bg-primary text-primary-foreground px-1 rounded text-xs">1</span>
-            <span>Copy the configuration above or download it as a JSON file</span>
+            <span>Click "Apply to Config" to automatically add hooks to your Claude Code configuration, or manually copy/download the configuration</span>
           </li>
           <li className="flex gap-2">
             <span className="font-mono bg-primary text-primary-foreground px-1 rounded text-xs">2</span>
-            <span>Open your Claude Code settings file (usually at <code className="bg-background px-1 rounded">~/.config/claude-code/settings.json</code>)</span>
+            <span>If applying manually, add the hooks to your Claude Code config file at <code className="bg-background px-1 rounded">~/.claude/settings.json</code></span>
           </li>
           <li className="flex gap-2">
             <span className="font-mono bg-primary text-primary-foreground px-1 rounded text-xs">3</span>
-            <span>Add or merge the "hooks" configuration into your settings</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-mono bg-primary text-primary-foreground px-1 rounded text-xs">4</span>
             <span>Restart Claude Code for the changes to take effect</span>
           </li>
           <li className="flex gap-2">
-            <span className="font-mono bg-primary text-primary-foreground px-1 rounded text-xs">5</span>
+            <span className="font-mono bg-primary text-primary-foreground px-1 rounded text-xs">4</span>
             <span>Start using subagents in Claude Code - their activity will appear in the Subagent Monitor</span>
           </li>
         </ol>
