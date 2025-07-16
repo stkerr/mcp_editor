@@ -3,6 +3,7 @@ import { IPC_CHANNELS, CONFIG_PATHS } from '../shared/constants';
 import { AppType, MCPConfiguration, ValidationResult, SubagentInfo } from '../shared/types';
 import { 
   readConfigFile, 
+  readGroupedConfigFile,
   writeConfigFile, 
   getPlatform, 
   detectInstalledApps,
@@ -42,6 +43,23 @@ export function setupConfigHandlers() {
       return { 
         success: false, 
         error: `Failed to save configuration: ${(error as Error).message}` 
+      };
+    }
+  });
+
+  // Load grouped configuration (for Claude Code)
+  ipcMain.handle(IPC_CHANNELS.LOAD_GROUPED_CONFIG, async (_, appType: AppType) => {
+    try {
+      const platform = getPlatform();
+      const appKey = appType === 'desktop' ? 'claudeDesktop' : 'claudeCode';
+      const configPath = CONFIG_PATHS[appKey][platform];
+      
+      const config = await readGroupedConfigFile(configPath);
+      return { success: true, data: config };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: `Failed to load grouped configuration: ${(error as Error).message}` 
       };
     }
   });

@@ -7,14 +7,15 @@ export const CONFIG_PATHS: Record<string, ConfigPaths> = {
     linux: '~/.config/Claude/claude_desktop_config.json'
   },
   claudeCode: {
-    windows: '%APPDATA%/Claude/claude_code_config.json',
-    mac: '~/Library/Application Support/Claude/claude_code_config.json',
-    linux: '~/.config/Claude/claude_code_config.json'
+    windows: '~/.claude.json',
+    mac: '~/.claude.json',
+    linux: '~/.claude.json'
   }
 };
 
 export const IPC_CHANNELS = {
   LOAD_CONFIG: 'config:load',
+  LOAD_GROUPED_CONFIG: 'config:load-grouped',
   SAVE_CONFIG: 'config:save',
   VALIDATE_CONFIG: 'config:validate',
   DETECT_APPS: 'config:detect-apps',

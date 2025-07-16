@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { AppType, MCPConfiguration, ViewType, SubagentInfo } from '../shared/types';
+import { AppType, MCPConfiguration, GroupedMCPConfiguration, ViewType, SubagentInfo } from '../shared/types';
 import { ConfigList } from './components/ConfigList';
+import { GroupedConfigList } from './components/GroupedConfigList';
 import { TabNavigation } from './components/TabNavigation';
 import { SubagentMonitor } from './components/SubagentMonitor';
 
@@ -9,6 +10,7 @@ declare global {
   interface Window {
     configAPI: {
       loadConfig: (appType: AppType) => Promise<any>;
+      loadGroupedConfig: (appType: AppType) => Promise<any>;
       saveConfig: (appType: AppType, config: MCPConfiguration) => Promise<any>;
       validateConfig: (config: MCPConfiguration) => Promise<any>;
       detectApps: () => Promise<any>;
@@ -24,6 +26,7 @@ function App() {
   const [selectedApp, setSelectedApp] = useState<AppType>('desktop');
   const [selectedView, setSelectedView] = useState<ViewType>('servers');
   const [config, setConfig] = useState<MCPConfiguration | null>(null);
+  const [groupedConfig, setGroupedConfig] = useState<GroupedMCPConfiguration | null>(null);
   const [availableApps, setAvailableApps] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,11 +59,24 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const result = await window.configAPI.loadConfig(selectedApp);
-      if (result.success) {
-        setConfig(result.data);
+      // For Claude Code, load grouped configuration
+      if (selectedApp === 'code') {
+        const result = await window.configAPI.loadGroupedConfig(selectedApp);
+        if (result.success) {
+          setGroupedConfig(result.data);
+          setConfig(null); // Clear regular config
+        } else {
+          setError(result.error);
+        }
       } else {
-        setError(result.error);
+        // For Claude Desktop, load regular configuration
+        const result = await window.configAPI.loadConfig(selectedApp);
+        if (result.success) {
+          setConfig(result.data);
+          setGroupedConfig(null); // Clear grouped config
+        } else {
+          setError(result.error);
+        }
       }
     } catch (err) {
       setError('Failed to load configuration');
@@ -125,6 +141,16 @@ function App() {
                   <div className="bg-destructive/10 border border-destructive rounded-lg p-4 mb-6">
                     <p className="text-destructive">{error}</p>
                   </div>
+                ) : (selectedApp === 'code' && groupedConfig) ? (
+                  <GroupedConfigList
+                    groupedConfig={groupedConfig}
+                    onConfigChange={(newGroupedConfig) => {
+                      // For now, grouped config changes are not saved
+                      // This would require implementing proper project-based saving
+                      setGroupedConfig(newGroupedConfig);
+                      console.warn('Saving grouped config not yet implemented');
+                    }}
+                  />
                 ) : config ? (
                   <ConfigList
                     config={config}

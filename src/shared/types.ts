@@ -10,6 +10,18 @@ export interface MCPConfiguration {
   };
 }
 
+// Extended configuration for grouped display
+export interface GroupedMCPConfiguration {
+  globalServers: {
+    [serverName: string]: MCPServerConfig;
+  };
+  projectServers: {
+    [projectPath: string]: {
+      [serverName: string]: MCPServerConfig;
+    };
+  };
+}
+
 export type AppType = 'desktop' | 'code';
 
 export interface ValidationResult {

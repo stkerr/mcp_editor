@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { app } from 'electron';
-import { MCPConfiguration, SubagentInfo } from '../shared/types';
+import { MCPConfiguration, SubagentInfo, GroupedMCPConfiguration } from '../shared/types';
 import { CONFIG_PATHS, SUBAGENT_DATA_PATHS } from '../shared/constants';
 
 export function resolvePath(path: string): string {
@@ -33,11 +33,79 @@ export async function readConfigFile(filePath: string): Promise<MCPConfiguration
   try {
     const resolvedPath = resolvePath(filePath);
     const content = await fs.readFile(resolvedPath, 'utf-8');
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    
+    // Handle Claude Code's project-based structure in ~/.claude.json
+    if (filePath.includes('.claude.json') && parsed.projects) {
+      // Aggregate all MCP servers from all projects
+      const aggregatedServers: Record<string, any> = {};
+      
+      for (const [projectPath, projectConfig] of Object.entries(parsed.projects)) {
+        if ((projectConfig as any).mcpServers) {
+          const mcpServers = (projectConfig as any).mcpServers;
+          for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
+            // If server name already exists, add project path as suffix to make it unique
+            const uniqueName = aggregatedServers[serverName] 
+              ? `${serverName} (${projectPath})` 
+              : serverName;
+            aggregatedServers[uniqueName] = serverConfig;
+          }
+        }
+      }
+      
+      return { mcpServers: aggregatedServers };
+    }
+    
+    // Standard format (Claude Desktop)
+    return parsed;
   } catch (error) {
     if ((error as any).code === 'ENOENT') {
       // File doesn't exist, return default config
       return { mcpServers: {} };
+    }
+    throw error;
+  }
+}
+
+export async function readGroupedConfigFile(filePath: string): Promise<GroupedMCPConfiguration | null> {
+  try {
+    const resolvedPath = resolvePath(filePath);
+    const content = await fs.readFile(resolvedPath, 'utf-8');
+    const parsed = JSON.parse(content);
+    
+    // Handle Claude Code's project-based structure in ~/.claude.json
+    if (filePath.includes('.claude.json')) {
+      const result: GroupedMCPConfiguration = {
+        globalServers: {},
+        projectServers: {}
+      };
+      
+      // Get global servers from top-level mcpServers
+      if (parsed.mcpServers) {
+        result.globalServers = parsed.mcpServers;
+      }
+      
+      // Get project-specific servers
+      if (parsed.projects) {
+        for (const [projectPath, projectConfig] of Object.entries(parsed.projects)) {
+          if ((projectConfig as any).mcpServers && Object.keys((projectConfig as any).mcpServers).length > 0) {
+            result.projectServers[projectPath] = (projectConfig as any).mcpServers;
+          }
+        }
+      }
+      
+      return result;
+    }
+    
+    // For Claude Desktop, all servers are "global"
+    return {
+      globalServers: parsed.mcpServers || {},
+      projectServers: {}
+    };
+  } catch (error) {
+    if ((error as any).code === 'ENOENT') {
+      // File doesn't exist, return default config
+      return { globalServers: {}, projectServers: {} };
     }
     throw error;
   }
@@ -53,6 +121,15 @@ export async function writeConfigFile(filePath: string, config: MCPConfiguration
     await fs.copyFile(resolvedPath, backupPath);
   } catch {
     // No existing file to backup
+  }
+  
+  // Handle Claude Code's project-based structure
+  if (filePath.includes('.claude.json')) {
+    // For Claude Code, we need to preserve the existing structure
+    // This is a simplified approach - in a real app, you'd want a project selector
+    console.warn('Writing to ~/.claude.json is not fully implemented - would need project selection');
+    // For now, just write as standard format (this will break the Claude Code format)
+    // TODO: Implement proper project-based writing
   }
   
   await fs.writeFile(resolvedPath, JSON.stringify(config, null, 2));

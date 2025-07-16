@@ -6,6 +6,7 @@ interface ServerCardProps {
   name: string;
   config: MCPServerConfig;
   isNew?: boolean;
+  readOnly?: boolean;
   onUpdate: (name: string, config: MCPServerConfig) => void;
   onDelete: () => void;
 }
@@ -16,7 +17,7 @@ interface EnvVar {
   value: string;
 }
 
-export function ServerCard({ name, config, isNew = false, onUpdate, onDelete }: ServerCardProps) {
+export function ServerCard({ name, config, isNew = false, readOnly = false, onUpdate, onDelete }: ServerCardProps) {
   const [isEditing, setIsEditing] = useState(isNew);
   const [editName, setEditName] = useState(name);
   const [editConfig, setEditConfig] = useState<MCPServerConfig>(config);
@@ -246,20 +247,22 @@ export function ServerCard({ name, config, isNew = false, onUpdate, onDelete }: 
             )}
           </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <button
-            onClick={() => setIsEditing(true)}
-            className="p-2 text-muted-foreground hover:text-foreground"
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-2 text-destructive hover:text-destructive/80"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="p-2 text-muted-foreground hover:text-foreground"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="p-2 text-destructive hover:text-destructive/80"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

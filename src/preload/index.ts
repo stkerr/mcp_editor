@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const IPC_CHANNELS = {
   LOAD_CONFIG: 'config:load',
+  LOAD_GROUPED_CONFIG: 'config:load-grouped',
   SAVE_CONFIG: 'config:save',
   VALIDATE_CONFIG: 'config:validate',
   DETECT_APPS: 'config:detect-apps',
@@ -15,6 +16,9 @@ const IPC_CHANNELS = {
 const configAPI = {
   loadConfig: (appType: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.LOAD_CONFIG, appType),
+  
+  loadGroupedConfig: (appType: any) => 
+    ipcRenderer.invoke(IPC_CHANNELS.LOAD_GROUPED_CONFIG, appType),
   
   saveConfig: (appType: any, config: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, appType, config),
