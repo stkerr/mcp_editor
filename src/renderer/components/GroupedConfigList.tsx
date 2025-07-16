@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GroupedMCPConfiguration, MCPServerConfig } from '../../shared/types';
 import { ServerCard } from './ServerCard';
-import { Plus, Globe, FolderOpen, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, Globe, FolderOpen, ChevronRight, ChevronDown, Home } from 'lucide-react';
 
 interface GroupedConfigListProps {
   groupedConfig: GroupedMCPConfiguration;
@@ -12,6 +12,8 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
   const [isAdding, setIsAdding] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [addingToProject, setAddingToProject] = useState<string | null>(null);
+  const [isAddingProject, setIsAddingProject] = useState(false);
+  const [newProjectPath, setNewProjectPath] = useState('');
 
   const toggleProject = (projectPath: string) => {
     const newExpanded = new Set(expandedProjects);
@@ -111,6 +113,31 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
     setAddingToProject(projectPath);
   };
 
+  const handleCreateNewProject = () => {
+    if (!newProjectPath.trim()) return;
+    
+    // Normalize the path
+    const normalizedPath = newProjectPath.trim().replace(/\\/g, '/');
+    
+    // Add the new project with empty servers
+    const newConfig = {
+      ...groupedConfig,
+      projectServers: {
+        ...groupedConfig.projectServers,
+        [normalizedPath]: {}
+      }
+    };
+    
+    onConfigChange(newConfig);
+    
+    // Expand the new project and reset form
+    const newExpanded = new Set(expandedProjects);
+    newExpanded.add(normalizedPath);
+    setExpandedProjects(newExpanded);
+    setNewProjectPath('');
+    setIsAddingProject(false);
+  };
+
   const globalServerEntries = Object.entries(groupedConfig.globalServers || {});
   const projectEntries = Object.entries(groupedConfig.projectServers || {});
 
@@ -184,14 +211,79 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
 
       {/* Project-Specific Servers Section */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <FolderOpen className="w-5 h-5 text-primary" />
-          <h3 className="text-lg font-medium">Project-Specific Servers</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-primary" />
+            <h3 className="text-lg font-medium">Project-Specific Servers</h3>
+          </div>
+          <button
+            onClick={() => setIsAddingProject(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            New Project
+          </button>
         </div>
 
-        {projectEntries.length === 0 && (
+        {projectEntries.length === 0 && !isAddingProject && (
           <div className="text-center py-8 bg-secondary/20 rounded-lg ml-7">
             <p className="text-muted-foreground text-sm">No project-specific MCP servers configured</p>
+          </div>
+        )}
+
+        {/* New Project Form */}
+        {isAddingProject && (
+          <div className="border rounded-lg p-4 ml-7 space-y-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Project Path</label>
+              <input
+                type="text"
+                value={newProjectPath}
+                onChange={(e) => setNewProjectPath(e.target.value)}
+                placeholder="/path/to/your/project"
+                className="w-full px-3 py-2 border rounded-md bg-background"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateNewProject();
+                  } else if (e.key === 'Escape') {
+                    setIsAddingProject(false);
+                    setNewProjectPath('');
+                  }
+                }}
+                autoFocus
+              />
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-muted-foreground">
+                  Enter the full path to your project directory
+                </p>
+                <button
+                  onClick={() => setNewProjectPath(process.platform === 'win32' ? 'C:\\Users\\' + process.env.USERNAME : process.env.HOME || '/Users/' + process.env.USER)}
+                  className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                  type="button"
+                >
+                  <Home className="w-3 h-3" />
+                  Use home directory
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsAddingProject(false);
+                  setNewProjectPath('');
+                }}
+                className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateNewProject}
+                disabled={!newProjectPath.trim()}
+                className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create Project
+              </button>
+            </div>
           </div>
         )}
 
