@@ -17,6 +17,7 @@ export const IPC_CHANNELS = {
   LOAD_CONFIG: 'config:load',
   LOAD_GROUPED_CONFIG: 'config:load-grouped',
   SAVE_CONFIG: 'config:save',
+  SAVE_GROUPED_CONFIG: 'config:save-grouped',
   VALIDATE_CONFIG: 'config:validate',
   DETECT_APPS: 'config:detect-apps',
   CONFIG_ERROR: 'config:error',

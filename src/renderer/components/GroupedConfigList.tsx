@@ -75,6 +75,42 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
     onConfigChange(newConfig);
   };
 
+  const handleUpdateProjectServer = (projectPath: string, oldName: string, newName: string, serverConfig: MCPServerConfig) => {
+    const newConfig = { ...groupedConfig };
+    if (!newConfig.projectServers[projectPath]) {
+      newConfig.projectServers[projectPath] = {};
+    }
+    
+    if (oldName !== newName) {
+      delete newConfig.projectServers[projectPath][oldName];
+    }
+    newConfig.projectServers[projectPath][newName] = serverConfig;
+    onConfigChange(newConfig);
+  };
+
+  const handleDeleteProjectServer = (projectPath: string, name: string) => {
+    const newConfig = {
+      ...groupedConfig,
+      projectServers: {
+        ...groupedConfig.projectServers,
+        [projectPath]: { ...groupedConfig.projectServers[projectPath] }
+      }
+    };
+    delete newConfig.projectServers[projectPath][name];
+    
+    // If no servers left in project, remove the project entry
+    if (Object.keys(newConfig.projectServers[projectPath]).length === 0) {
+      delete newConfig.projectServers[projectPath];
+    }
+    
+    onConfigChange(newConfig);
+  };
+
+  const handleAddProjectServer = (projectPath: string) => {
+    setIsAdding(true);
+    setAddingToProject(projectPath);
+  };
+
   const globalServerEntries = Object.entries(groupedConfig.globalServers || {});
   const projectEntries = Object.entries(groupedConfig.projectServers || {});
 
@@ -105,13 +141,16 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
               (Available in all projects)
             </span>
           </div>
-          <button
-            onClick={handleAddGlobalServer}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add Global
-          </button>
+          {/* Disabled for Claude Code - writing global config not supported yet */}
+          {false && (
+            <button
+              onClick={handleAddGlobalServer}
+              className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Add Global
+            </button>
+          )}
         </div>
 
         {globalServerEntries.length === 0 && !isAdding && (
@@ -163,24 +202,38 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
             
             return (
               <div key={projectPath} className="border rounded-lg">
-                <div
-                  className="flex items-center gap-3 p-3 hover:bg-muted/50 cursor-pointer transition-colors"
-                  onClick={() => toggleProject(projectPath)}
-                >
-                  <div className="flex-shrink-0">
-                    {isExpanded ? (
-                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    )}
+                <div className="flex items-center justify-between p-3">
+                  <div
+                    className="flex items-center gap-3 flex-1 hover:bg-muted/50 cursor-pointer transition-colors rounded"
+                    onClick={() => toggleProject(projectPath)}
+                  >
+                    <div className="flex-shrink-0">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{projectPath}</p>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {serverEntries.length} server{serverEntries.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
-                  <FolderOpen className="w-4 h-4 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{projectPath}</p>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {serverEntries.length} server{serverEntries.length !== 1 ? 's' : ''}
-                  </span>
+                  {isExpanded && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddProjectServer(projectPath);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/90 transition-colors ml-2"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add
+                    </button>
+                  )}
                 </div>
 
                 {isExpanded && (
@@ -190,17 +243,28 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
                         <ServerCard
                           name={name}
                           config={serverConfig}
-                          onUpdate={() => {
-                            // For now, editing project-specific servers is read-only
-                            console.warn('Editing project-specific servers not yet implemented');
-                          }}
-                          onDelete={() => {
-                            console.warn('Deleting project-specific servers not yet implemented');
-                          }}
-                          readOnly
+                          onUpdate={(newName, newConfig) => 
+                            handleUpdateProjectServer(projectPath, name, newName, newConfig)
+                          }
+                          onDelete={() => handleDeleteProjectServer(projectPath, name)}
                         />
                       </div>
                     ))}
+                    
+                    {isAdding && addingToProject === projectPath && (
+                      <div className="ml-7">
+                        <ServerCard
+                          name=""
+                          config={{ command: '', args: [], env: {} }}
+                          isNew
+                          onUpdate={handleSaveNewServer}
+                          onDelete={() => {
+                            setIsAdding(false);
+                            setAddingToProject(null);
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -4,6 +4,7 @@ const IPC_CHANNELS = {
   LOAD_CONFIG: 'config:load',
   LOAD_GROUPED_CONFIG: 'config:load-grouped',
   SAVE_CONFIG: 'config:save',
+  SAVE_GROUPED_CONFIG: 'config:save-grouped',
   VALIDATE_CONFIG: 'config:validate',
   DETECT_APPS: 'config:detect-apps',
   CONFIG_ERROR: 'config:error',
@@ -22,6 +23,9 @@ const configAPI = {
   
   saveConfig: (appType: any, config: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, appType, config),
+  
+  saveGroupedConfig: (appType: any, groupedConfig: any) => 
+    ipcRenderer.invoke(IPC_CHANNELS.SAVE_GROUPED_CONFIG, appType, groupedConfig),
   
   validateConfig: (config: any) => 
     ipcRenderer.invoke(IPC_CHANNELS.VALIDATE_CONFIG, config),

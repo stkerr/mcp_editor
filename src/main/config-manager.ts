@@ -1,10 +1,11 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS, CONFIG_PATHS } from '../shared/constants';
-import { AppType, MCPConfiguration, ValidationResult, SubagentInfo } from '../shared/types';
+import { AppType, MCPConfiguration, GroupedMCPConfiguration, ValidationResult, SubagentInfo } from '../shared/types';
 import { 
   readConfigFile, 
   readGroupedConfigFile,
-  writeConfigFile, 
+  writeConfigFile,
+  writeGroupedConfigFile, 
   getPlatform, 
   detectInstalledApps,
   readSubagentData,
@@ -60,6 +61,23 @@ export function setupConfigHandlers() {
       return { 
         success: false, 
         error: `Failed to load grouped configuration: ${(error as Error).message}` 
+      };
+    }
+  });
+
+  // Save grouped configuration (for Claude Code)
+  ipcMain.handle(IPC_CHANNELS.SAVE_GROUPED_CONFIG, async (_, appType: AppType, groupedConfig: GroupedMCPConfiguration) => {
+    try {
+      const platform = getPlatform();
+      const appKey = appType === 'desktop' ? 'claudeDesktop' : 'claudeCode';
+      const configPath = CONFIG_PATHS[appKey][platform];
+      
+      await writeGroupedConfigFile(configPath, groupedConfig);
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: `Failed to save grouped configuration: ${(error as Error).message}` 
       };
     }
   });

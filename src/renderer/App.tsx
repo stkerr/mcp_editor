@@ -12,6 +12,7 @@ declare global {
       loadConfig: (appType: AppType) => Promise<any>;
       loadGroupedConfig: (appType: AppType) => Promise<any>;
       saveConfig: (appType: AppType, config: MCPConfiguration) => Promise<any>;
+      saveGroupedConfig: (appType: AppType, config: GroupedMCPConfiguration) => Promise<any>;
       validateConfig: (config: MCPConfiguration) => Promise<any>;
       detectApps: () => Promise<any>;
       getSubagents: () => Promise<any>;
@@ -144,11 +145,19 @@ function App() {
                 ) : (selectedApp === 'code' && groupedConfig) ? (
                   <GroupedConfigList
                     groupedConfig={groupedConfig}
-                    onConfigChange={(newGroupedConfig) => {
-                      // For now, grouped config changes are not saved
-                      // This would require implementing proper project-based saving
-                      setGroupedConfig(newGroupedConfig);
-                      console.warn('Saving grouped config not yet implemented');
+                    onConfigChange={async (newGroupedConfig) => {
+                      try {
+                        const result = await window.configAPI.saveGroupedConfig(selectedApp, newGroupedConfig);
+                        if (result.success) {
+                          setGroupedConfig(newGroupedConfig);
+                          // TODO: Show success toast
+                          console.log('Configuration saved successfully');
+                        } else {
+                          setError(result.error);
+                        }
+                      } catch (err) {
+                        setError('Failed to save configuration');
+                      }
                     }}
                   />
                 ) : config ? (

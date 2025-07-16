@@ -135,6 +135,66 @@ export async function writeConfigFile(filePath: string, config: MCPConfiguration
   await fs.writeFile(resolvedPath, JSON.stringify(config, null, 2));
 }
 
+export async function writeGroupedConfigFile(filePath: string, groupedConfig: GroupedMCPConfiguration): Promise<void> {
+  const resolvedPath = resolvePath(filePath);
+  await ensureDirectoryExists(resolvedPath);
+  
+  // Create backup
+  try {
+    const backupPath = `${resolvedPath}.backup`;
+    await fs.copyFile(resolvedPath, backupPath);
+  } catch (error) {
+    console.error('Failed to create backup:', error);
+  }
+  
+  // Handle Claude Code's project-based structure
+  if (filePath.includes('.claude.json')) {
+    try {
+      // Read the existing file to preserve non-MCP data
+      const existingContent = await fs.readFile(resolvedPath, 'utf-8');
+      const existingData = JSON.parse(existingContent);
+      
+      // Update the mcpServers at the root level (global servers)
+      existingData.mcpServers = groupedConfig.globalServers || {};
+      
+      // Update project-specific servers
+      if (!existingData.projects) {
+        existingData.projects = {};
+      }
+      
+      // First, clear all mcpServers from existing projects
+      for (const projectPath in existingData.projects) {
+        if (existingData.projects[projectPath]) {
+          delete existingData.projects[projectPath].mcpServers;
+        }
+      }
+      
+      // Then add the servers from our grouped config
+      for (const [projectPath, servers] of Object.entries(groupedConfig.projectServers)) {
+        if (!existingData.projects[projectPath]) {
+          existingData.projects[projectPath] = {};
+        }
+        if (Object.keys(servers).length > 0) {
+          existingData.projects[projectPath].mcpServers = servers;
+        }
+      }
+      
+      // Write the merged data back
+      await fs.writeFile(resolvedPath, JSON.stringify(existingData, null, 2));
+      console.log('Successfully updated Claude Code configuration');
+    } catch (error) {
+      console.error('Failed to update Claude Code configuration:', error);
+      throw error;
+    }
+  } else {
+    // For other apps, just write the global servers as a standard config
+    const standardConfig: MCPConfiguration = {
+      mcpServers: groupedConfig.globalServers
+    };
+    await fs.writeFile(resolvedPath, JSON.stringify(standardConfig, null, 2));
+  }
+}
+
 export function getPlatform(): 'windows' | 'mac' | 'linux' {
   switch (process.platform) {
     case 'win32':
