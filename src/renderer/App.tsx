@@ -39,6 +39,10 @@ function App() {
   useEffect(() => {
     if (selectedApp) {
       loadConfig();
+      // Reset to servers view when switching to Claude Desktop
+      if (selectedApp === 'desktop' && selectedView === 'subagents') {
+        setSelectedView('servers');
+      }
     }
   }, [selectedApp]);
 

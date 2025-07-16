@@ -16,9 +16,12 @@ export function TabNavigation({
   onAppChange, 
   onViewChange 
 }: TabNavigationProps) {
-  const views: { id: ViewType; label: string; description: string }[] = [
+  // Only show subagent monitor for Claude Code
+  const views: { id: ViewType; label: string; description: string }[] = selectedApp === 'code' ? [
     { id: 'servers', label: 'MCP Servers', description: 'Configure MCP server connections' },
     { id: 'subagents', label: 'Subagent Monitor', description: 'Monitor Claude Code subagent activity' }
+  ] : [
+    { id: 'servers', label: 'MCP Servers', description: 'Configure MCP server connections' }
   ];
 
   return (
@@ -76,9 +79,6 @@ export function TabNavigation({
       {/* View Description */}
       <div className="mt-2 text-sm text-muted-foreground">
         {views.find(v => v.id === selectedView)?.description}
-        {selectedView === 'subagents' && selectedApp !== 'code' && (
-          <span className="text-amber-600 ml-2">(Only available for Claude Code)</span>
-        )}
       </div>
     </div>
   );
