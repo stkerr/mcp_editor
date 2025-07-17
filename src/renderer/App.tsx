@@ -4,6 +4,7 @@ import { ConfigList } from './components/ConfigList';
 import { GroupedConfigList } from './components/GroupedConfigList';
 import { TabNavigation } from './components/TabNavigation';
 import { SubagentMonitor } from './components/SubagentMonitor';
+import { ClaudeUsage } from './components/ClaudeUsage';
 
 // Type augmentation for window
 declare global {
@@ -39,7 +40,8 @@ function App() {
   useEffect(() => {
     if (selectedApp) {
       loadConfig();
-      // Reset to servers view when switching to Claude Desktop
+      // Reset to servers view when switching to Claude Desktop and viewing subagents
+      // (Claude Desktop doesn't have subagents, but usage is available for both)
       if (selectedApp === 'desktop' && selectedView === 'subagents') {
         setSelectedView('servers');
       }
@@ -173,6 +175,8 @@ function App() {
               </>
             ) : selectedView === 'subagents' ? (
               <SubagentMonitor selectedApp={selectedApp} />
+            ) : selectedView === 'usage' ? (
+              <ClaudeUsage />
             ) : null}
           </>
         )}

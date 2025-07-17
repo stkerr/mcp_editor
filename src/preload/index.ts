@@ -13,7 +13,9 @@ const IPC_CHANNELS = {
   CLEAR_SUBAGENTS: 'subagents:clear',
   SUBAGENT_UPDATE: 'subagents:update',
   APPLY_HOOKS_TO_CONFIG: 'config:apply-hooks',
-  CHECK_HOOKS_CONFIGURED: 'config:check-hooks'
+  CHECK_HOOKS_CONFIGURED: 'config:check-hooks',
+  CHECK_CCUSAGE_AVAILABLE: 'usage:check-available',
+  GET_USAGE_DATA: 'usage:get-data'
 };
 
 const configAPI = {
@@ -54,7 +56,13 @@ const configAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.APPLY_HOOKS_TO_CONFIG, hooks),
   
   checkHooksConfigured: (hooks: any) => 
-    ipcRenderer.invoke(IPC_CHANNELS.CHECK_HOOKS_CONFIGURED, hooks)
+    ipcRenderer.invoke(IPC_CHANNELS.CHECK_HOOKS_CONFIGURED, hooks),
+  
+  checkCcusageAvailable: () => 
+    ipcRenderer.invoke(IPC_CHANNELS.CHECK_CCUSAGE_AVAILABLE),
+  
+  getUsageData: (options?: { raw?: boolean }) => 
+    ipcRenderer.invoke(IPC_CHANNELS.GET_USAGE_DATA, options)
 };
 
 contextBridge.exposeInMainWorld('configAPI', configAPI);

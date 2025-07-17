@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { setupConfigHandlers } from './config-manager';
 import { WebhookServer } from './webhook-server';
+import { setupUsageHandlers } from './usage-handlers';
 import { 
   getClaudeCodeConfigPath,
   readClaudeCodeConfig,
@@ -103,6 +104,7 @@ if (handleWebhookArgument()) {
 
   app.whenReady().then(async () => {
     setupConfigHandlers();
+    setupUsageHandlers();
     
     // Handle check-hooks-configured IPC
     ipcMain.handle(IPC_CHANNELS.CHECK_HOOKS_CONFIGURED, async (_, hooks: ClaudeCodeHooks) => {

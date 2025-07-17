@@ -35,7 +35,7 @@ export interface ConfigPaths {
   linux: string;
 }
 
-export type ViewType = 'servers' | 'subagents';
+export type ViewType = 'servers' | 'subagents' | 'usage';
 
 export interface SubagentInfo {
   id: string;
@@ -109,4 +109,32 @@ export interface SubagentSession {
   activeCount: number;
   completedCount: number;
   failedCount: number;
+}
+
+// Claude usage data interfaces
+export interface ClaudeUsageData {
+  totalCost: number;
+  currency: string;
+  period: {
+    start: string;
+    end: string;
+  };
+  tokenUsage: {
+    input: number;
+    output: number;
+    total: number;
+  };
+  modelBreakdown?: {
+    [model: string]: {
+      requests: number;
+      inputTokens: number;
+      outputTokens: number;
+      cost: number;
+    };
+  };
+  dailyUsage?: {
+    date: string;
+    cost: number;
+    tokens: number;
+  }[];
 }

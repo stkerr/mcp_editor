@@ -11,6 +11,8 @@ interface ConfigAPI {
   onSubagentUpdate: (callback: (data: any) => void) => () => void;
   applyHooksToConfig: (hooks: any) => Promise<{ success: boolean; backupPath?: string; error?: string }>;
   checkHooksConfigured: (hooks: any) => Promise<{ success: boolean; configured?: boolean; error?: string }>;
+  checkCcusageAvailable: () => Promise<{ success: boolean; available: boolean; method: 'direct' | 'npx' | null }>;
+  getUsageData: (options?: { raw?: boolean }) => Promise<{ success: boolean; data?: any; rawOutput?: string; error?: string }>;
 }
 
 declare global {
