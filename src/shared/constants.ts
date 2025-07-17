@@ -25,7 +25,8 @@ export const IPC_CHANNELS = {
   SAVE_SUBAGENT: 'subagents:save',
   CLEAR_SUBAGENTS: 'subagents:clear',
   SUBAGENT_UPDATE: 'subagents:update',
-  APPLY_HOOKS_TO_CONFIG: 'config:apply-hooks'
+  APPLY_HOOKS_TO_CONFIG: 'config:apply-hooks',
+  CHECK_HOOKS_CONFIGURED: 'config:check-hooks'
 };
 
 export const SUBAGENT_DATA_PATHS: ConfigPaths = {

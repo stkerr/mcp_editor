@@ -10,6 +10,7 @@ interface ConfigAPI {
   clearSubagents: () => Promise<any>;
   onSubagentUpdate: (callback: (data: any) => void) => () => void;
   applyHooksToConfig: (hooks: any) => Promise<{ success: boolean; backupPath?: string; error?: string }>;
+  checkHooksConfigured: (hooks: any) => Promise<{ success: boolean; configured?: boolean; error?: string }>;
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClaudeCodeHooks } from '../../shared/types';
 import { Copy, Check, Download, Settings, AlertCircle, Save } from 'lucide-react';
 import { WebhookTest } from './WebhookTest';
@@ -10,9 +10,11 @@ interface HooksConfigProps {
 export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   const [copied, setCopied] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
   const [webhookPort, setWebhookPort] = useState('3001');
   const [appPath, setAppPath] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [hooksConfigured, setHooksConfigured] = useState<boolean | null>(null);
   // Default to production mode unless we detect development environment
   const [isDevelopment, setIsDevelopment] = useState(
     window.location.hostname === 'localhost' || 
@@ -125,6 +127,31 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   const hooksConfig = generateHooksConfig();
   const isConfigEmpty = Object.keys(hooksConfig).length === 0;
 
+  // Check if hooks are already configured when component mounts or hooks config changes
+  useEffect(() => {
+    const checkHooks = async () => {
+      if (!window.configAPI?.checkHooksConfigured || isConfigEmpty) {
+        return;
+      }
+      
+      try {
+        const result = await window.configAPI.checkHooksConfigured(hooksConfig);
+        if (result.success) {
+          setHooksConfigured(result.configured || false);
+        }
+      } catch (error) {
+        console.error('Failed to check hooks configuration:', error);
+      }
+    };
+    
+    checkHooks();
+  }, [webhookPort, appPath, isDevelopment]); // Re-check when config parameters change
+
+  // Reset applied state when configuration changes
+  useEffect(() => {
+    setApplied(false);
+  }, [webhookPort, appPath, isDevelopment]);
+
   const handleCopy = async () => {
     try {
       const configText = JSON.stringify({ hooks: hooksConfig }, null, 2);
@@ -168,8 +195,14 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           type: 'success',
           message: `Hooks applied successfully! Backup saved at: ${result.backupPath}`
         });
+        // Re-check if hooks are configured
+        setHooksConfigured(true);
+        // Set applied state for button feedback
+        setApplied(true);
         // Clear success notification after 5 seconds
         setTimeout(() => setNotification(null), 5000);
+        // Reset applied state after 3 seconds
+        setTimeout(() => setApplied(false), 3000);
       } else {
         setNotification({
           type: 'error',
@@ -212,18 +245,33 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         </div>
       )}
       
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-          <div>
-            <h4 className="font-medium text-amber-800">Setup Required</h4>
-            <p className="text-sm text-amber-700 mt-1">
-              To monitor subagents, you need to configure hooks in your Claude Code settings. 
-              This will send subagent events to the MCP Editor app.
-            </p>
+      {hooksConfigured === true ? (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Check className="w-5 h-5 text-green-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-green-800">Hooks Configured</h4>
+              <p className="text-sm text-green-700 mt-1">
+                Claude Code hooks are already configured. The Subagent Monitor will receive events
+                when you use subagents in Claude Code.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-amber-800">Setup Required</h4>
+              <p className="text-sm text-amber-700 mt-1">
+                To monitor subagents, you need to configure hooks in your Claude Code settings. 
+                This will send subagent events to the MCP Editor app.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <WebhookTest webhookPort={webhookPort} />
 
@@ -315,11 +363,24 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
             </button>
             <button
               onClick={handleApplyToConfig}
-              disabled={isConfigEmpty || isApplying}
-              className="flex items-center gap-1 px-3 py-1 text-sm bg-background border rounded hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isConfigEmpty || isApplying || applied}
+              className={`flex items-center gap-1 px-3 py-1 text-sm border rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                applied 
+                  ? 'bg-green-100 border-green-300 text-green-700' 
+                  : 'bg-background hover:bg-muted'
+              }`}
             >
-              <Save className="w-3 h-3" />
-              {isApplying ? 'Applying...' : 'Apply to Config'}
+              {applied ? (
+                <>
+                  <Check className="w-3 h-3" />
+                  Applied!
+                </>
+              ) : (
+                <>
+                  <Save className="w-3 h-3" />
+                  {isApplying ? 'Applying...' : 'Apply to Config'}
+                </>
+              )}
             </button>
           </div>
         </div>

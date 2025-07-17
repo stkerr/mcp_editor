@@ -7,7 +7,8 @@ import {
   readClaudeCodeConfig,
   mergeHooksConfiguration,
   createConfigBackup,
-  writeClaudeCodeConfig
+  writeClaudeCodeConfig,
+  checkHooksConfigured
 } from './hooks-config-helpers';
 import { IPC_CHANNELS } from '../shared/constants';
 import { ClaudeCodeHooks } from '../shared/types';
@@ -102,6 +103,16 @@ if (handleWebhookArgument()) {
 
   app.whenReady().then(async () => {
     setupConfigHandlers();
+    
+    // Handle check-hooks-configured IPC
+    ipcMain.handle(IPC_CHANNELS.CHECK_HOOKS_CONFIGURED, async (_, hooks: ClaudeCodeHooks) => {
+      try {
+        const configured = await checkHooksConfigured(hooks);
+        return { success: true, configured };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
     
     // Handle apply-hooks-to-config IPC
     ipcMain.handle(IPC_CHANNELS.APPLY_HOOKS_TO_CONFIG, async (_, newHooks: ClaudeCodeHooks) => {

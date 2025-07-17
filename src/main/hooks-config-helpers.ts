@@ -171,3 +171,44 @@ export async function writeClaudeCodeConfig(
   // Write the config file
   await fs.writeFile(configPath, configContent, 'utf-8');
 }
+
+/**
+ * Checks if specific hooks are already configured
+ */
+export async function checkHooksConfigured(hooksToCheck: ClaudeCodeHooks): Promise<boolean> {
+  try {
+    const config = await readClaudeCodeConfig();
+    
+    if (!config.hooks) {
+      return false;
+    }
+    
+    // Check each hook type in hooksToCheck
+    for (const [hookType, matchers] of Object.entries(hooksToCheck)) {
+      if (!matchers || matchers.length === 0) {
+        continue;
+      }
+      
+      const existingMatchers = config.hooks[hookType as keyof ClaudeCodeHooks];
+      if (!existingMatchers) {
+        return false;
+      }
+      
+      // Check if all matchers in hooksToCheck exist in the config
+      for (const matcher of matchers) {
+        const exists = existingMatchers.some(existingMatcher => 
+          areHookMatchersEqual(existingMatcher, matcher)
+        );
+        
+        if (!exists) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    // If we can't read the config, assume hooks are not configured
+    return false;
+  }
+}
