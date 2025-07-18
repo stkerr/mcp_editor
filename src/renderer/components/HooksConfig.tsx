@@ -45,18 +45,57 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   };
 
   const generateHooksConfig = (): ClaudeCodeHooks => {
+    const webhookPort = 3001;
     const executablePath = appPath || getDefaultAppPath();
+    
+    // Determine the webhook relay script path
+    let relayScriptPath: string;
+    if (isDevelopment) {
+      // In development, use the script from the project root
+      relayScriptPath = `${process.cwd()}/resources/webhook-relay.sh`;
+    } else {
+      // In production, the script is bundled in the app's Resources folder
+      // With extraResources, it's directly in the Resources folder
+      if (process.platform === 'darwin') {
+        // macOS: /Applications/MCP Editor.app/Contents/Resources/webhook-relay.sh
+        const pathParts = executablePath.split('/');
+        const appIndex = pathParts.findIndex(part => part.endsWith('.app'));
+        if (appIndex !== -1) {
+          const appPath = pathParts.slice(0, appIndex + 1).join('/');
+          relayScriptPath = `${appPath}/Contents/Resources/webhook-relay.sh`;
+        } else {
+          relayScriptPath = executablePath.replace(/\/MacOS\/[^\/]+$/, '/Resources/webhook-relay.sh');
+        }
+      } else if (process.platform === 'win32') {
+        // Windows: resources folder is next to the exe
+        relayScriptPath = executablePath.replace(/[^\\]+\.exe$/, 'resources\\webhook-relay.sh');
+      } else {
+        // Linux: resources folder is next to the executable
+        relayScriptPath = executablePath.replace(/[^\/]+$/, 'resources/webhook-relay.sh');
+      }
+    }
     
     if (isDevelopment) {
       // For development, use the webhook relay script with the endpoint as argument
       return {
+        Stop: [
+          {
+            matcher: ".*",
+            hooks: [
+              {
+                type: "command",
+                command: `"${relayScriptPath}" http://localhost:${webhookPort}/stop-event`
+              }
+            ]
+          }
+        ],
         SubagentStop: [
           {
             matcher: ".*",
             hooks: [
               {
                 type: "command",
-                command: `"${executablePath}" subagent-event`
+                command: `"${relayScriptPath}" http://localhost:${webhookPort}/subagent-event`
               }
             ]
           }
@@ -67,7 +106,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
             hooks: [
               {
                 type: "command", 
-                command: `"${executablePath}" tool-event`
+                command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
               }
             ]
           }
@@ -78,7 +117,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
             hooks: [
               {
                 type: "command", 
-                command: `"${executablePath}" tool-event`
+                command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
               }
             ]
           }
@@ -88,13 +127,24 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
     
     // For production builds
     return {
+      Stop: [
+        {
+          matcher: ".*",
+          hooks: [
+            {
+              type: "command",
+              command: `"${relayScriptPath}" http://localhost:${webhookPort}/stop-event`
+            }
+          ]
+        }
+      ],
       SubagentStop: [
         {
           matcher: ".*",
           hooks: [
             {
               type: "command",
-              command: `"${executablePath}" --webhook http://localhost:${webhookPort}/subagent-event`
+              command: `"${relayScriptPath}" http://localhost:${webhookPort}/subagent-event`
             }
           ]
         }
@@ -105,7 +155,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           hooks: [
             {
               type: "command", 
-              command: `"${executablePath}" --webhook http://localhost:${webhookPort}/tool-event`
+              command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
             }
           ]
         }
@@ -116,7 +166,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           hooks: [
             {
               type: "command", 
-              command: `"${executablePath}" --webhook http://localhost:${webhookPort}/tool-event`
+              command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
             }
           ]
         }

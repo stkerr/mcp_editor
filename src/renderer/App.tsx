@@ -5,6 +5,7 @@ import { GroupedConfigList } from './components/GroupedConfigList';
 import { TabNavigation } from './components/TabNavigation';
 import { SubagentMonitor } from './components/SubagentMonitor';
 import { ClaudeUsage } from './components/ClaudeUsage';
+import { Check, AlertCircle, Server } from 'lucide-react';
 
 // Type augmentation for window
 declare global {
@@ -20,6 +21,7 @@ declare global {
       saveSubagent: (subagent: SubagentInfo) => Promise<any>;
       clearSubagents: () => Promise<any>;
       onSubagentUpdate: (callback: (subagent: SubagentInfo) => void) => () => void;
+      onWebhookServerStatus: (callback: (status: any) => void) => () => void;
     };
   }
 }
@@ -32,9 +34,39 @@ function App() {
   const [availableApps, setAvailableApps] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [webhookNotification, setWebhookNotification] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
 
   useEffect(() => {
     loadInitialData();
+    
+    // Listen for webhook server status updates
+    const unsubscribe = window.configAPI?.onWebhookServerStatus?.((status) => {
+      if (status.status === 'running') {
+        setWebhookNotification({
+          type: 'success',
+          message: status.message || 'Webhook server is running'
+        });
+      } else if (status.status === 'error') {
+        setWebhookNotification({
+          type: 'error',
+          message: status.message || 'Failed to start webhook server'
+        });
+      } else {
+        setWebhookNotification({
+          type: 'info',
+          message: status.message || 'Webhook server status unknown'
+        });
+      }
+      
+      // Auto-dismiss success notifications after 5 seconds
+      if (status.status === 'running') {
+        setTimeout(() => setWebhookNotification(null), 5000);
+      }
+    });
+    
+    return () => {
+      unsubscribe?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -110,6 +142,45 @@ function App() {
     <div className="min-h-screen bg-background">
       {/* Draggable area for macOS */}
       <div className="draggable-header h-8 w-full fixed top-0 left-0 z-50" />
+      
+      {/* Webhook Server Status Notification */}
+      {webhookNotification && (
+        <div className="fixed top-10 right-6 z-50 animate-in slide-in-from-top duration-300">
+          <div className={`border rounded-lg p-4 shadow-lg ${
+            webhookNotification.type === 'success' 
+              ? 'bg-green-50 border-green-200' 
+              : webhookNotification.type === 'error'
+              ? 'bg-red-50 border-red-200'
+              : 'bg-blue-50 border-blue-200'
+          }`}>
+            <div className="flex items-start gap-3">
+              {webhookNotification.type === 'success' ? (
+                <Server className="w-5 h-5 text-green-600 mt-0.5" />
+              ) : webhookNotification.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              ) : (
+                <Server className="w-5 h-5 text-blue-600 mt-0.5" />
+              )}
+              <div>
+                <p className={`text-sm font-medium ${
+                  webhookNotification.type === 'success' ? 'text-green-700' : 
+                  webhookNotification.type === 'error' ? 'text-red-700' : 
+                  'text-blue-700'
+                }`}>
+                  Webhook Server Status
+                </p>
+                <p className={`text-sm mt-1 ${
+                  webhookNotification.type === 'success' ? 'text-green-600' : 
+                  webhookNotification.type === 'error' ? 'text-red-600' : 
+                  'text-blue-600'
+                }`}>
+                  {webhookNotification.message}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="container mx-auto p-6 max-w-6xl pt-14">
         <header className="mb-8">

@@ -15,7 +15,8 @@ const IPC_CHANNELS = {
   APPLY_HOOKS_TO_CONFIG: 'config:apply-hooks',
   CHECK_HOOKS_CONFIGURED: 'config:check-hooks',
   CHECK_CCUSAGE_AVAILABLE: 'usage:check-available',
-  GET_USAGE_DATA: 'usage:get-data'
+  GET_USAGE_DATA: 'usage:get-data',
+  WEBHOOK_SERVER_STATUS: 'webhook:status'
 };
 
 const configAPI = {
@@ -62,7 +63,13 @@ const configAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.CHECK_CCUSAGE_AVAILABLE),
   
   getUsageData: (options?: { raw?: boolean }) => 
-    ipcRenderer.invoke(IPC_CHANNELS.GET_USAGE_DATA, options)
+    ipcRenderer.invoke(IPC_CHANNELS.GET_USAGE_DATA, options),
+  
+  onWebhookServerStatus: (callback: any) => {
+    const handler = (event: any, data: any) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, handler);
+  }
 };
 
 contextBridge.exposeInMainWorld('configAPI', configAPI);

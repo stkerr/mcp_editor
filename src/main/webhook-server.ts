@@ -9,7 +9,7 @@ interface WebhookEvent {
   sessionId: string;
   toolInput?: any;
   toolOutput?: any;
-  eventType: 'subagent-stop' | 'tool-use' | 'notification';
+  eventType: 'subagent-stop' | 'tool-use' | 'notification' | 'stop';
   timestamp: string;
   transcriptPath?: string;
 }
@@ -67,7 +67,7 @@ export class WebhookServer {
     const pathname = parsedUrl.pathname;
 
     try {
-      if (req.method === 'POST' && (pathname === '/subagent-event' || pathname === '/tool-event')) {
+      if (req.method === 'POST' && (pathname === '/subagent-event' || pathname === '/tool-event' || pathname === '/stop-event')) {
         await this.handleWebhookEvent(req, res);
       } else if (req.method === 'GET' && pathname === '/health') {
         this.handleHealthCheck(res);
@@ -120,7 +120,11 @@ export class WebhookServer {
     let eventType: WebhookEvent['eventType'] = 'tool-use';
     
     // Check various ways the event type might be specified
-    if (hookInput.event_type === 'SubagentStop' || 
+    if (hookInput.event_type === 'Stop' || 
+        hookInput.hook_event_name === 'Stop' ||
+        hookInput.hook_event === 'Stop') {
+      eventType = 'stop';
+    } else if (hookInput.event_type === 'SubagentStop' || 
         hookInput.hook_event_name === 'SubagentStop' ||
         hookInput.hook_event === 'SubagentStop') {
       eventType = 'subagent-stop';
@@ -262,6 +266,22 @@ export class WebhookServer {
         this.notifyRenderer(subagentInfo);
       } catch (error) {
         console.error('Failed to create new subagent:', error);
+      }
+    } else if (eventData.eventType === 'stop') {
+      // Handle Stop event - mark the active prompt as completed
+      console.log('Processing Stop event for session:', eventData.sessionId);
+      
+      try {
+        // Get the prompt hierarchy manager instance
+        const promptManager = (global as any).promptHierarchyManager;
+        if (promptManager) {
+          await promptManager.handleStopEvent(eventData.sessionId, eventData.timestamp);
+          console.log('Stop event processed successfully');
+        } else {
+          console.error('PromptHierarchyManager not available');
+        }
+      } catch (error) {
+        console.error('Failed to process Stop event:', error);
       }
     } else {
       console.log('Unknown event type, not saving:', eventData.eventType);

@@ -64,6 +64,12 @@
       "dist",
       "resources"
     ],
+    "extraResources": [
+      {
+        "from": "resources/webhook-relay.sh",
+        "to": "webhook-relay.sh"
+      }
+    ],
     "mac": {
       "artifactName": "${productName}_${version}_${arch}.${ext}",
       "category": "public.app-category.developer-tools",

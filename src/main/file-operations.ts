@@ -408,3 +408,35 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
 export async function clearSubagentData(): Promise<void> {
   await writeSubagentData([]);
 }
+
+// Simple prompt hierarchy management
+interface PromptInfo {
+  sessionId: string;
+  startTime: Date;
+  endTime?: Date;
+  status: 'active' | 'completed' | 'interrupted';
+  prompt?: string;
+}
+
+const activePrompts = new Map<string, PromptInfo>();
+
+export const promptHierarchyManager = {
+  async handleStopEvent(sessionId: string, timestamp: string): Promise<void> {
+    const prompt = activePrompts.get(sessionId);
+    if (prompt && prompt.status === 'active') {
+      prompt.status = 'completed';
+      prompt.endTime = new Date(timestamp);
+      console.log(`Marked prompt for session ${sessionId} as completed`);
+    } else {
+      console.log(`No active prompt found for session ${sessionId}`);
+    }
+  },
+  
+  setActivePrompt(sessionId: string, prompt: PromptInfo): void {
+    activePrompts.set(sessionId, prompt);
+  },
+  
+  getActivePrompt(sessionId: string): PromptInfo | undefined {
+    return activePrompts.get(sessionId);
+  }
+};

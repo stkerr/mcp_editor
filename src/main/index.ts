@@ -11,6 +11,7 @@ import {
   writeClaudeCodeConfig,
   checkHooksConfigured
 } from './hooks-config-helpers';
+import { promptHierarchyManager } from './file-operations';
 import { IPC_CHANNELS } from '../shared/constants';
 import { ClaudeCodeHooks } from '../shared/types';
 
@@ -36,12 +37,38 @@ function handleWebhookArgument() {
     process.stdin.on('end', async () => {
       try {
         // Forward the event to the webhook URL
-        const response = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: inputData
+        // Use http module instead of fetch for better reliability with localhost
+        const http = await import('http');
+        const url = new URL(webhookUrl);
+        
+        const response = await new Promise<{ ok: boolean; status: number }>((resolve, reject) => {
+          const req = http.request({
+            hostname: url.hostname,
+            port: url.port || 80,
+            path: url.pathname,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(inputData)
+            }
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+              resolve({
+                ok: res.statusCode >= 200 && res.statusCode < 300,
+                status: res.statusCode || 0
+              });
+            });
+          });
+          
+          req.on('error', (err) => {
+            console.error('HTTP request error:', err);
+            reject(err);
+          });
+          
+          req.write(inputData);
+          req.end();
         });
         
         if (!response.ok) {
@@ -100,6 +127,23 @@ if (handleWebhookArgument()) {
     mainWindow.on('closed', () => {
       mainWindow = null;
     });
+
+    // Send webhook server status once window is ready
+    mainWindow.webContents.on('did-finish-load', () => {
+      if (webhookServer) {
+        mainWindow?.webContents.send(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, {
+          status: 'running',
+          port: 3001,
+          message: 'Webhook server is running on port 3001'
+        });
+      } else {
+        mainWindow?.webContents.send(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, {
+          status: 'not_started',
+          port: 3001,
+          message: 'Webhook server is not running'
+        });
+      }
+    });
   }
 
   app.whenReady().then(async () => {
@@ -147,13 +191,41 @@ if (handleWebhookArgument()) {
       }
     });
     
+    // Set up global prompt hierarchy manager
+    (global as any).promptHierarchyManager = promptHierarchyManager;
+    
     // Start webhook server
     try {
       webhookServer = new WebhookServer(3001);
       await webhookServer.start();
       console.log('Webhook server started successfully');
+      
+      // Send status to any existing windows
+      const windows = BrowserWindow.getAllWindows();
+      windows.forEach(window => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, {
+            status: 'running',
+            port: 3001,
+            message: 'Webhook server started successfully on port 3001'
+          });
+        }
+      });
     } catch (error) {
       console.error('Failed to start webhook server:', error);
+      
+      // Send error status to any existing windows
+      const windows = BrowserWindow.getAllWindows();
+      windows.forEach(window => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, {
+            status: 'error',
+            port: 3001,
+            message: `Failed to start webhook server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      });
     }
     
     createWindow();
