@@ -207,6 +207,8 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
         return <XCircle className="w-4 h-4 text-red-500" />;
       case 'interrupted':
         return <XCircle className="w-4 h-4 text-orange-500" />;
+      case '':
+        return null; // No icon for empty status
       default:
         return <Clock className="w-4 h-4 text-gray-500" />;
     }
@@ -222,6 +224,8 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
         return 'text-red-600 bg-red-100';
       case 'interrupted':
         return 'text-orange-600 bg-orange-100';
+      case '':
+        return ''; // No color for empty status
       default:
         return 'text-gray-600 bg-gray-100';
     }
@@ -310,9 +314,11 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
             )}
 
             {/* Status Icon */}
-            <div className="flex-shrink-0">
-              {getStatusIcon(taskGroup.status)}
-            </div>
+            {getStatusIcon(taskGroup.status) && (
+              <div className="flex-shrink-0">
+                {getStatusIcon(taskGroup.status)}
+              </div>
+            )}
 
             {/* Main Content */}
             <div className="flex-1 min-w-0">
@@ -320,9 +326,11 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
                 <h4 className="font-medium text-sm truncate">
                   {taskGroup.description}
                 </h4>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(taskGroup.status)}`}>
-                  {taskGroup.status}
-                </span>
+                {taskGroup.status && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(taskGroup.status)}`}>
+                    {taskGroup.status}
+                  </span>
+                )}
                 {hasMultipleEvents && (
                   <span className="text-xs text-muted-foreground">
                     ({taskGroup.events.length} events)
@@ -360,12 +368,14 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
                   className="flex items-center gap-3 p-2 border rounded-lg hover:bg-muted/30 cursor-pointer transition-colors text-sm"
                   onClick={() => setSelectedSubagent(event)}
                 >
-                  <div className="flex-shrink-0">
-                    {getStatusIcon(event.status)}
-                  </div>
+                  {getStatusIcon(event.status) && (
+                    <div className="flex-shrink-0">
+                      {getStatusIcon(event.status)}
+                    </div>
+                  )}
                   <div className="flex-1">
                     <span className="text-muted-foreground">
-                      {event.status === 'active' ? 'Started' : 'Completed'} at {formatTime(event.startTime)}
+                      {event.status === 'active' ? 'Started' : event.status === 'completed' ? 'Completed' : 'Event'} at {formatTime(event.startTime)}
                     </span>
                   </div>
                 </div>

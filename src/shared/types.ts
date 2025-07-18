@@ -43,7 +43,7 @@ export interface SubagentInfo {
   parentPromptId?: string; // Links this event to its parent UserPromptSubmit
   startTime: Date;
   endTime?: Date;
-  status: 'active' | 'completed' | 'failed';
+  status: 'active' | 'completed' | 'failed' | '';
   description?: string;
   toolsUsed: string[];
   lastActivity: Date;
@@ -84,7 +84,7 @@ export interface ClaudeCodeHooks {
 export interface TaskGroup {
   description: string;
   events: SubagentInfo[];  // Array of related events (typically PreToolUse and PostToolUse)
-  status: 'active' | 'completed' | 'failed';
+  status: 'active' | 'completed' | 'failed' | '';
   startTime: Date;
   endTime?: Date;
   // Aggregated metrics

@@ -172,19 +172,23 @@ export function SubagentDetailsModal({ subagent, onClose }: SubagentDetailsModal
             </div>
           )}
 
-          {/* Tool Input */}
+          {/* Tool Input / User Prompt */}
           {subagent.toolInput && (
             <div className="mb-6">
               <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
                 <Code className="h-4 w-4" />
-                Tool Input
+                {subagent.toolsUsed.includes('UserPromptSubmit') ? 'User Prompt' : 'Tool Input'}
               </h3>
               <div className="bg-muted/30 rounded-lg p-4 max-h-64 overflow-y-auto">
-                <pre className="text-sm whitespace-pre-wrap font-mono">
-                  {typeof subagent.toolInput === 'object' 
-                    ? JSON.stringify(subagent.toolInput, null, 2)
-                    : subagent.toolInput}
-                </pre>
+                {subagent.toolsUsed.includes('UserPromptSubmit') && subagent.toolInput.prompt ? (
+                  <p className="text-sm whitespace-pre-wrap">{subagent.toolInput.prompt}</p>
+                ) : (
+                  <pre className="text-sm whitespace-pre-wrap font-mono">
+                    {typeof subagent.toolInput === 'object' 
+                      ? JSON.stringify(subagent.toolInput, null, 2)
+                      : subagent.toolInput}
+                  </pre>
+                )}
               </div>
             </div>
           )}

@@ -39,7 +39,7 @@ function createTaskGroups(subagents: SubagentInfo[], expandedNodes: Set<string>)
       taskGroupMap.set(description, {
         description,
         events: [],
-        status: 'active',
+        status: subagent.status || 'active', // Use subagent's status, default to 'active'
         startTime: subagent.startTime,
         endTime: undefined
       });
@@ -51,8 +51,12 @@ function createTaskGroups(subagents: SubagentInfo[], expandedNodes: Set<string>)
     // Update task group based on events
     const hasCompletedEvent = taskGroup.events.some(e => e.status === 'completed');
     const hasFailedEvent = taskGroup.events.some(e => e.status === 'failed');
+    const allEmptyStatus = taskGroup.events.every(e => e.status === '');
     
-    if (hasCompletedEvent) {
+    if (allEmptyStatus) {
+      // If all events have empty status, set task group status to empty
+      taskGroup.status = '';
+    } else if (hasCompletedEvent) {
       taskGroup.status = 'completed';
       // Find the latest end time from completed events
       const completedEvents = taskGroup.events.filter(e => e.status === 'completed' && e.endTime);
@@ -150,6 +154,9 @@ export function buildPromptHierarchy(
         case 'failed':
           failedCount++;
           break;
+        case '':
+          // Don't count empty status events
+          break;
       }
     });
     
@@ -206,6 +213,9 @@ export function buildPromptHierarchy(
           break;
         case 'failed':
           failedCount++;
+          break;
+        case '':
+          // Don't count empty status events
           break;
       }
     });

@@ -309,7 +309,7 @@ export class WebhookServer {
               parentPromptId: updatedPrompt.promptId,
               startTime: new Date(eventData.timestamp),
               endTime: new Date(eventData.timestamp),
-              status: 'completed',
+              status: '',
               description: '✅ Session completed',
               toolsUsed: ['Stop'],
               lastActivity: new Date(eventData.timestamp)
@@ -364,11 +364,15 @@ export class WebhookServer {
             sessionId: eventData.sessionId,
             parentPromptId: promptId,
             startTime: new Date(eventData.timestamp),
-            status: 'completed',
-            description: `⚡ Task started`,
+            status: '',
+            description: `⚡ Prompt started`,
             toolsUsed: ['UserPromptSubmit'],
             lastActivity: new Date(eventData.timestamp),
-            endTime: new Date(eventData.timestamp)
+            endTime: new Date(eventData.timestamp),
+            // Store the prompt text in toolInput so it's displayed in the details modal
+            toolInput: {
+              prompt: eventData.promptText || 'No prompt text'
+            }
           };
           
           try {

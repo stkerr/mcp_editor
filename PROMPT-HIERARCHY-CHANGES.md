@@ -23,7 +23,7 @@ An example is below of what it might look like.
 
 ```
 ▼ 🗨️ "Create a function to calculate fibonacci"     [2m 30s] [450 tokens] <-- This is the prompt text from the UserPromptSubmit event
-  │ ⚡ Task started: "Calculate fibonacci"   <-- This is the UserPromptSubmit event itself as a standlone line item
+  │ ⚡ Prompt started: "Calculate fibonacci"   <-- This is the UserPromptSubmit event itself as a standlone line item
   │ ✓ Task completed: "Calculate fibonacci"        [2.1s] [145 tokens]
   │ ⚡ Edit started: "fibonacci.py"
   │ ✓ Edit completed: "fibonacci.py"               [0.3s]

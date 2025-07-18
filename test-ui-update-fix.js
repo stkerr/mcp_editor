@@ -45,7 +45,7 @@ console.log('1. Sending UserPromptSubmit event...');
 sendEvent('/prompt-event', promptEvent, 'UserPromptSubmit');
 
 setTimeout(() => {
-  console.log('\n✅ CHECK THE UI NOW - The prompt should appear with "⚡ Task started" event');
+  console.log('\n✅ CHECK THE UI NOW - The prompt should appear with "⚡ Prompt started" event');
   console.log('✅ You should NOT need to wait for any Task events\n');
 }, 1000);
 
