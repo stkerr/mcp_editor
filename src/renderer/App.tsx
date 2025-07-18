@@ -3,7 +3,7 @@ import { AppType, MCPConfiguration, GroupedMCPConfiguration, ViewType, SubagentI
 import { ConfigList } from './components/ConfigList';
 import { GroupedConfigList } from './components/GroupedConfigList';
 import { TabNavigation } from './components/TabNavigation';
-import { SubagentMonitor } from './components/SubagentMonitor';
+import { SubagentMonitor } from './components/SubagentMonitorPromptBased';
 import { ClaudeUsage } from './components/ClaudeUsage';
 import { Check, AlertCircle, Server } from 'lucide-react';
 
@@ -22,6 +22,7 @@ declare global {
       clearSubagents: () => Promise<any>;
       onSubagentUpdate: (callback: (subagent: SubagentInfo) => void) => () => void;
       onWebhookServerStatus: (callback: (status: any) => void) => () => void;
+      getPrompts: () => Promise<any>;
     };
   }
 }

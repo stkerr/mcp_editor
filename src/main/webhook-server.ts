@@ -9,9 +9,10 @@ interface WebhookEvent {
   sessionId: string;
   toolInput?: any;
   toolOutput?: any;
-  eventType: 'subagent-stop' | 'tool-use' | 'notification' | 'stop';
+  eventType: 'subagent-stop' | 'tool-use' | 'notification' | 'stop' | 'prompt-submit';
   timestamp: string;
   transcriptPath?: string;
+  promptText?: string;
 }
 
 export class WebhookServer {
@@ -67,7 +68,7 @@ export class WebhookServer {
     const pathname = parsedUrl.pathname;
 
     try {
-      if (req.method === 'POST' && (pathname === '/subagent-event' || pathname === '/tool-event' || pathname === '/stop-event')) {
+      if (req.method === 'POST' && (pathname === '/subagent-event' || pathname === '/tool-event' || pathname === '/stop-event' || pathname === '/prompt-event')) {
         await this.handleWebhookEvent(req, res);
       } else if (req.method === 'GET' && pathname === '/health') {
         this.handleHealthCheck(res);
@@ -128,6 +129,10 @@ export class WebhookServer {
         hookInput.hook_event_name === 'SubagentStop' ||
         hookInput.hook_event === 'SubagentStop') {
       eventType = 'subagent-stop';
+    } else if (hookInput.event_type === 'UserPromptSubmit' || 
+        hookInput.hook_event_name === 'UserPromptSubmit' ||
+        hookInput.hook_event === 'UserPromptSubmit') {
+      eventType = 'prompt-submit';
     } else if (hookInput.hook_event_name === 'PostToolUse' && 
                hookInput.tool_name === 'Task') {
       // PostToolUse with Task tool indicates a subagent completed
@@ -162,6 +167,12 @@ export class WebhookServer {
       console.log(`PostToolUse captured description: "${toolInput.description}"`);
     } else if (hookInput.hook_event_name === 'PostToolUse') {
       console.warn('PostToolUse event missing description in tool_input:', toolInput);
+    }
+
+    // For UserPromptSubmit, extract the prompt text
+    if (eventType === 'prompt-submit') {
+      result.promptText = hookInput.prompt || hookInput.text || hookInput.input || 'No prompt text';
+      console.log(`UserPromptSubmit captured prompt: "${result.promptText}"`);
     }
 
     return result;
@@ -200,9 +211,14 @@ export class WebhookServer {
         output = toolOutput;
       }
       
+      // Get the active prompt ID for this session
+      const promptManager = (global as any).promptHierarchyManager;
+      const parentPromptId = promptManager?.getActivePromptForSession(eventData.sessionId);
+      
       const subagentInfo: SubagentInfo = {
         id: `${eventData.sessionId}-${Date.now()}-stop`, // Temporary ID for matching
         sessionId: eventData.sessionId,
+        parentPromptId,
         startTime: new Date(eventData.timestamp), // Will be merged with existing start time
         endTime: new Date(eventData.timestamp),
         status: 'completed',
@@ -243,9 +259,14 @@ export class WebhookServer {
       const timestamp = Date.now();
       const uniqueId = `${eventData.sessionId}-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
       
+      // Get the active prompt ID for this session
+      const promptManager = (global as any).promptHierarchyManager;
+      const parentPromptId = promptManager?.getActivePromptForSession(eventData.sessionId);
+      
       const subagentInfo: SubagentInfo = {
         id: uniqueId, // Unique ID for each subagent
         sessionId: eventData.sessionId,
+        parentPromptId,
         startTime: new Date(eventData.timestamp),
         status: 'active',
         description: description,
@@ -277,11 +298,107 @@ export class WebhookServer {
         if (promptManager) {
           await promptManager.handleStopEvent(eventData.sessionId, eventData.timestamp);
           console.log('Stop event processed successfully');
+          
+          // Notify renderer about the prompt completion
+          const updatedPrompt = promptManager.getActivePrompt(eventData.sessionId);
+          if (updatedPrompt) {
+            // Create a subagent entry for the Stop event
+            const stopSubagent: SubagentInfo = {
+              id: `${updatedPrompt.promptId}-stop-event`,
+              sessionId: eventData.sessionId,
+              parentPromptId: updatedPrompt.promptId,
+              startTime: new Date(eventData.timestamp),
+              endTime: new Date(eventData.timestamp),
+              status: 'completed',
+              description: '✅ Session completed',
+              toolsUsed: ['Stop'],
+              lastActivity: new Date(eventData.timestamp)
+            };
+            
+            try {
+              await addSubagentInfo(stopSubagent);
+              console.log('Created subagent entry for Stop event');
+              
+              // Notify renderer about the new subagent
+              this.notifyRenderer(stopSubagent);
+            } catch (error) {
+              console.error('Failed to create subagent for Stop:', error);
+            }
+            
+            const windows = BrowserWindow.getAllWindows();
+            windows.forEach(window => {
+              if (window && !window.isDestroyed()) {
+                window.webContents.send(IPC_CHANNELS.PROMPT_UPDATE, {
+                  type: 'completed',
+                  promptId: updatedPrompt.promptId,
+                  sessionId: eventData.sessionId,
+                  timestamp: eventData.timestamp
+                });
+              }
+            });
+          }
         } else {
           console.error('PromptHierarchyManager not available');
         }
       } catch (error) {
         console.error('Failed to process Stop event:', error);
+      }
+    } else if (eventData.eventType === 'prompt-submit') {
+      // Handle UserPromptSubmit event - start tracking a new prompt
+      console.log('Processing UserPromptSubmit event for session:', eventData.sessionId);
+      
+      try {
+        // Get the prompt hierarchy manager instance
+        const promptManager = (global as any).promptHierarchyManager;
+        if (promptManager) {
+          const promptId = await promptManager.handleUserPromptSubmit(
+            eventData.sessionId, 
+            eventData.timestamp, 
+            eventData.promptText || 'No prompt text'
+          );
+          console.log('UserPromptSubmit event processed successfully, promptId:', promptId);
+          
+          // Create a subagent entry for the UserPromptSubmit event itself
+          const promptSubagent: SubagentInfo = {
+            id: `${promptId}-prompt-event`,
+            sessionId: eventData.sessionId,
+            parentPromptId: promptId,
+            startTime: new Date(eventData.timestamp),
+            status: 'completed',
+            description: `⚡ Task started`,
+            toolsUsed: ['UserPromptSubmit'],
+            lastActivity: new Date(eventData.timestamp),
+            endTime: new Date(eventData.timestamp)
+          };
+          
+          try {
+            await addSubagentInfo(promptSubagent);
+            console.log('Created subagent entry for UserPromptSubmit event');
+            
+            // Notify renderer about the new subagent
+            this.notifyRenderer(promptSubagent);
+          } catch (error) {
+            console.error('Failed to create subagent for UserPromptSubmit:', error);
+          }
+          
+          // Notify renderer about the new prompt
+          const windows = BrowserWindow.getAllWindows();
+          windows.forEach(window => {
+            if (window && !window.isDestroyed()) {
+              window.webContents.send(IPC_CHANNELS.PROMPT_UPDATE, {
+                type: 'new',
+                promptId,
+                sessionId: eventData.sessionId,
+                promptText: eventData.promptText,
+                timestamp: eventData.timestamp
+              });
+            }
+          });
+        } else {
+          console.error('PromptHierarchyManager not available');
+        }
+      } catch (error) {
+        console.error('Failed to process UserPromptSubmit event:', error);
       }
     } else {
       console.log('Unknown event type, not saving:', eventData.eventType);

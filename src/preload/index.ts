@@ -16,7 +16,9 @@ const IPC_CHANNELS = {
   CHECK_HOOKS_CONFIGURED: 'config:check-hooks',
   CHECK_CCUSAGE_AVAILABLE: 'usage:check-available',
   GET_USAGE_DATA: 'usage:get-data',
-  WEBHOOK_SERVER_STATUS: 'webhook:status'
+  WEBHOOK_SERVER_STATUS: 'webhook:status',
+  PROMPT_UPDATE: 'prompts:update',
+  GET_PROMPTS: 'prompts:get'
 };
 
 const configAPI = {
@@ -69,7 +71,38 @@ const configAPI = {
     const handler = (event: any, data: any) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.WEBHOOK_SERVER_STATUS, handler);
-  }
+  },
+  
+  getPrompts: () => 
+    ipcRenderer.invoke(IPC_CHANNELS.GET_PROMPTS)
 };
 
 contextBridge.exposeInMainWorld('configAPI', configAPI);
+
+// Expose electronAPI for receiving events from main process
+const electronAPI = {
+  receive: (channel: string, callback: (data: any) => void) => {
+    const validChannels = [IPC_CHANNELS.PROMPT_UPDATE];
+    if (validChannels.includes(channel)) {
+      const handler = (event: any, ...args: any[]) => callback(...args);
+      ipcRenderer.on(channel, handler);
+    }
+  },
+  removeAllListeners: (channel: string) => {
+    const validChannels = [IPC_CHANNELS.PROMPT_UPDATE];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
+  }
+};
+
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+
+// Expose platform information
+const platformAPI = {
+  platform: process.platform,
+  cwd: process.cwd(),
+  isDevelopment: process.env.NODE_ENV === 'development'
+};
+
+contextBridge.exposeInMainWorld('platformAPI', platformAPI);

@@ -15,9 +15,16 @@ interface ConfigAPI {
   getUsageData: (options?: { raw?: boolean }) => Promise<{ success: boolean; data?: any; rawOutput?: string; error?: string }>;
 }
 
+interface PlatformAPI {
+  platform: NodeJS.Platform;
+  cwd: string;
+  isDevelopment: boolean;
+}
+
 declare global {
   interface Window {
     configAPI: ConfigAPI;
+    platformAPI?: PlatformAPI;
   }
 }
 

@@ -40,6 +40,7 @@ export type ViewType = 'servers' | 'subagents' | 'usage';
 export interface SubagentInfo {
   id: string;
   sessionId: string;
+  parentPromptId?: string; // Links this event to its parent UserPromptSubmit
   startTime: Date;
   endTime?: Date;
   status: 'active' | 'completed' | 'failed';
@@ -76,6 +77,7 @@ export interface ClaudeCodeHooks {
   Stop?: HookMatcher[];
   SubagentStop?: HookMatcher[];
   PreCompact?: HookMatcher[];
+  UserPromptSubmit?: HookMatcher[];
 }
 
 // Task grouping - represents related PreToolUse/PostToolUse events

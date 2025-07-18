@@ -162,4 +162,21 @@ export function setupConfigHandlers() {
       };
     }
   });
+
+  // Get prompt data
+  ipcMain.handle(IPC_CHANNELS.GET_PROMPTS, async () => {
+    try {
+      const promptManager = (global as any).promptHierarchyManager;
+      if (promptManager) {
+        const prompts = promptManager.getAllPrompts();
+        return { success: true, data: prompts };
+      }
+      return { success: true, data: [] };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: `Failed to load prompt data: ${(error as Error).message}` 
+      };
+    }
+  });
 }

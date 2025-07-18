@@ -29,7 +29,9 @@ export const IPC_CHANNELS = {
   CHECK_HOOKS_CONFIGURED: 'config:check-hooks',
   CHECK_CCUSAGE_AVAILABLE: 'usage:check-available',
   GET_USAGE_DATA: 'usage:get-data',
-  WEBHOOK_SERVER_STATUS: 'webhook:status'
+  WEBHOOK_SERVER_STATUS: 'webhook:status',
+  PROMPT_UPDATE: 'prompts:update',
+  GET_PROMPTS: 'prompts:get'
 };
 
 export const SUBAGENT_DATA_PATHS: ConfigPaths = {

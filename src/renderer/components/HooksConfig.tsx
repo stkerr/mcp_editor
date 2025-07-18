@@ -52,11 +52,13 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
     let relayScriptPath: string;
     if (isDevelopment) {
       // In development, use the script from the project root
-      relayScriptPath = `${process.cwd()}/resources/webhook-relay.sh`;
+      // In development, use relative path or current working directory
+      relayScriptPath = window.platformAPI?.cwd ? `${window.platformAPI.cwd}/resources/webhook-relay.sh` : './resources/webhook-relay.sh';
     } else {
       // In production, the script is bundled in the app's Resources folder
       // With extraResources, it's directly in the Resources folder
-      if (process.platform === 'darwin') {
+      const platform = window.platformAPI?.platform || navigator.platform.toLowerCase();
+      if (platform === 'darwin' || platform.includes('mac')) {
         // macOS: /Applications/MCP Editor.app/Contents/Resources/webhook-relay.sh
         const pathParts = executablePath.split('/');
         const appIndex = pathParts.findIndex(part => part.endsWith('.app'));
@@ -66,7 +68,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         } else {
           relayScriptPath = executablePath.replace(/\/MacOS\/[^\/]+$/, '/Resources/webhook-relay.sh');
         }
-      } else if (process.platform === 'win32') {
+      } else if (platform === 'win32' || platform.includes('win')) {
         // Windows: resources folder is next to the exe
         relayScriptPath = executablePath.replace(/[^\\]+\.exe$/, 'resources\\webhook-relay.sh');
       } else {
@@ -78,6 +80,17 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
     if (isDevelopment) {
       // For development, use the webhook relay script with the endpoint as argument
       return {
+        UserPromptSubmit: [
+          {
+            matcher: ".*",
+            hooks: [
+              {
+                type: "command",
+                command: `"${relayScriptPath}" http://localhost:${webhookPort}/prompt-event`
+              }
+            ]
+          }
+        ],
         Stop: [
           {
             matcher: ".*",
@@ -127,6 +140,17 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
     
     // For production builds
     return {
+      UserPromptSubmit: [
+        {
+          matcher: ".*",
+          hooks: [
+            {
+              type: "command",
+              command: `"${relayScriptPath}" http://localhost:${webhookPort}/prompt-event`
+            }
+          ]
+        }
+      ],
       Stop: [
         {
           matcher: ".*",

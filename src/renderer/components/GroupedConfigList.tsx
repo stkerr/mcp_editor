@@ -257,7 +257,14 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
                   Enter the full path to your project directory
                 </p>
                 <button
-                  onClick={() => setNewProjectPath(process.platform === 'win32' ? 'C:\\Users\\' + process.env.USERNAME : process.env.HOME || '/Users/' + process.env.USER)}
+                  onClick={() => {
+                    const platform = window.platformAPI?.platform || navigator.platform.toLowerCase();
+                    if (platform === 'win32' || platform.includes('win')) {
+                      setNewProjectPath('C:\\Users\\');
+                    } else {
+                      setNewProjectPath('/Users/');
+                    }
+                  }}
                   className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
                   type="button"
                 >

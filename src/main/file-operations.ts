@@ -407,26 +407,61 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
 
 export async function clearSubagentData(): Promise<void> {
   await writeSubagentData([]);
+  // Also clear in-memory prompt hierarchy data
+  promptHierarchyManager.clearAllPrompts();
 }
 
-// Simple prompt hierarchy management
+// Enhanced prompt hierarchy management
 interface PromptInfo {
+  promptId: string;
   sessionId: string;
   startTime: Date;
   endTime?: Date;
   status: 'active' | 'completed' | 'interrupted';
-  prompt?: string;
+  promptText: string;
 }
 
 const activePrompts = new Map<string, PromptInfo>();
+const allPrompts = new Map<string, PromptInfo>();
 
 export const promptHierarchyManager = {
+  async handleUserPromptSubmit(sessionId: string, timestamp: string, promptText: string): Promise<string> {
+    // Check if there's already an active prompt for this session
+    const existingPrompt = activePrompts.get(sessionId);
+    if (existingPrompt && existingPrompt.status === 'active') {
+      // Mark the existing prompt as interrupted
+      existingPrompt.status = 'interrupted';
+      existingPrompt.endTime = new Date(timestamp);
+      console.log(`Marked prompt ${existingPrompt.promptId} for session ${sessionId} as interrupted`);
+    }
+    
+    // Generate a unique prompt ID
+    const promptId = `prompt-${sessionId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create the new prompt
+    const newPrompt: PromptInfo = {
+      promptId,
+      sessionId,
+      startTime: new Date(timestamp),
+      status: 'active',
+      promptText
+    };
+    
+    // Store the prompt
+    activePrompts.set(sessionId, newPrompt);
+    allPrompts.set(promptId, newPrompt);
+    
+    console.log(`Created new prompt ${promptId} for session ${sessionId}: "${promptText.substring(0, 50)}..."`);
+    
+    return promptId;
+  },
+
   async handleStopEvent(sessionId: string, timestamp: string): Promise<void> {
     const prompt = activePrompts.get(sessionId);
     if (prompt && prompt.status === 'active') {
       prompt.status = 'completed';
       prompt.endTime = new Date(timestamp);
-      console.log(`Marked prompt for session ${sessionId} as completed`);
+      console.log(`Marked prompt ${prompt.promptId} for session ${sessionId} as completed`);
     } else {
       console.log(`No active prompt found for session ${sessionId}`);
     }
@@ -434,9 +469,31 @@ export const promptHierarchyManager = {
   
   setActivePrompt(sessionId: string, prompt: PromptInfo): void {
     activePrompts.set(sessionId, prompt);
+    if (prompt.promptId) {
+      allPrompts.set(prompt.promptId, prompt);
+    }
   },
   
   getActivePrompt(sessionId: string): PromptInfo | undefined {
     return activePrompts.get(sessionId);
+  },
+  
+  getPromptById(promptId: string): PromptInfo | undefined {
+    return allPrompts.get(promptId);
+  },
+  
+  getActivePromptForSession(sessionId: string): string | undefined {
+    const prompt = activePrompts.get(sessionId);
+    return prompt?.promptId;
+  },
+  
+  getAllPrompts(): PromptInfo[] {
+    return Array.from(allPrompts.values());
+  },
+  
+  clearAllPrompts(): void {
+    activePrompts.clear();
+    allPrompts.clear();
+    console.log('Cleared all prompt hierarchy data from memory');
   }
 };
