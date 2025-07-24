@@ -93,31 +93,33 @@ export function SubagentDetailsModal({ subagent, onClose }: SubagentDetailsModal
             </div>
           </div>
 
-          {/* Duration and Performance */}
-          <div className="bg-muted/30 rounded-lg p-4 mb-6">
-            <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Duration & Performance
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Actual Duration</p>
-                <p className="text-lg font-semibold">{formatDuration(actualDuration)}</p>
+          {/* Duration and Performance - Hide for prompt started events */}
+          {!(subagent.description === '⚡ Prompt started' && subagent.toolsUsed.includes('UserPromptSubmit')) && (
+            <div className="bg-muted/30 rounded-lg p-4 mb-6">
+              <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Duration & Performance
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Actual Duration</p>
+                  <p className="text-lg font-semibold">{formatDuration(actualDuration)}</p>
+                </div>
+                {subagent.totalDurationMs && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Reported Duration</p>
+                    <p className="text-lg font-semibold">{formatDuration(subagent.totalDurationMs)}</p>
+                  </div>
+                )}
+                {subagent.toolUseCount !== undefined && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tool Uses</p>
+                    <p className="text-lg font-semibold">{subagent.toolUseCount}</p>
+                  </div>
+                )}
               </div>
-              {subagent.totalDurationMs && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Reported Duration</p>
-                  <p className="text-lg font-semibold">{formatDuration(subagent.totalDurationMs)}</p>
-                </div>
-              )}
-              {subagent.toolUseCount !== undefined && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Tool Uses</p>
-                  <p className="text-lg font-semibold">{subagent.toolUseCount}</p>
-                </div>
-              )}
             </div>
-          </div>
+          )}
 
           {/* Token Usage */}
           {(subagent.totalTokens !== undefined || subagent.inputTokens !== undefined) && (

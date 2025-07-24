@@ -497,7 +497,13 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
       </div>
 
       <div className="space-y-2">
-        {promptHierarchy.map((promptNode) => (
+        {promptHierarchy.map((promptNode) => {
+          // Check if this prompt has a "session completed" event
+          const hasSessionCompleted = promptNode.events.some(
+            event => event.description === '✅ Session completed'
+          );
+          
+          return (
           <div key={promptNode.prompt.promptId} className="space-y-1">
             {/* Prompt Header */}
             <div 
@@ -523,7 +529,11 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
 
               {/* Prompt Icon */}
               <div className="flex-shrink-0">
-                <MessageSquare className="w-4 h-4 text-primary" />
+                {hasSessionCompleted ? (
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                ) : (
+                  <MessageSquare className="w-4 h-4 text-primary" />
+                )}
               </div>
 
               {/* Main Content */}
@@ -587,7 +597,8 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Details Modal */}

@@ -190,11 +190,50 @@ export function buildPromptHierarchy(
   
   // Create synthetic prompt nodes for orphaned events
   orphanedBySession.forEach((events, sessionId) => {
+    // Get the earliest event's timestamp for display
+    const earliestTime = new Date(Math.min(...events.map(e => new Date(e.startTime).getTime())));
+    const timeString = earliestTime.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    // Try to extract meaningful information from the events
+    const firstEvent = events[0];
+    
+    // First, check if any event is a UserPromptSubmit event with prompt text
+    const promptSubmitEvent = events.find(e => 
+      e.description === '⚡ Prompt started' && 
+      e.toolsUsed.includes('UserPromptSubmit') &&
+      e.toolInput?.prompt
+    );
+    
+    let promptText: string;
+    if (promptSubmitEvent && promptSubmitEvent.toolInput?.prompt) {
+      // Use the actual prompt text from UserPromptSubmit event
+      promptText = promptSubmitEvent.toolInput.prompt;
+    } else {
+      // Fall back to extracting from event descriptions
+      const eventDescriptions = events
+        .filter(e => e.description && e.description !== 'Unnamed Task')
+        .map(e => e.description)
+        .slice(0, 3); // Take first 3 descriptions
+      
+      if (eventDescriptions.length > 0) {
+        // If we have event descriptions, use them
+        promptText = `Orphaned Tasks (${timeString}): ${eventDescriptions.join(', ')}${eventDescriptions.length < events.length ? '...' : ''}`;
+      } else {
+        // Fallback to session info
+        promptText = `Orphaned Session (${timeString}) - ${events.length} event${events.length > 1 ? 's' : ''}`;
+      }
+    }
+    
     const legacyPrompt: PromptInfo = {
       promptId: `legacy-${sessionId}`,
-      promptText: `Legacy Session ${sessionId.substring(0, 8)}`,
+      promptText,
       sessionId,
-      startTime: new Date(Math.min(...events.map(e => new Date(e.startTime).getTime()))),
+      startTime: earliestTime,
       status: 'completed'
     };
     
