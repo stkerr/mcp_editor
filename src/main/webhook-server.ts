@@ -309,7 +309,7 @@ export class WebhookServer {
               parentPromptId: updatedPrompt.promptId,
               startTime: new Date(eventData.timestamp),
               endTime: new Date(eventData.timestamp),
-              status: '',
+              status: 'completed',
               description: '✅ Session completed',
               toolsUsed: ['Stop'],
               lastActivity: new Date(eventData.timestamp)
@@ -364,7 +364,7 @@ export class WebhookServer {
             sessionId: eventData.sessionId,
             parentPromptId: promptId,
             startTime: new Date(eventData.timestamp),
-            status: '',
+            status: 'completed',
             description: `⚡ Prompt started`,
             toolsUsed: ['UserPromptSubmit'],
             lastActivity: new Date(eventData.timestamp),

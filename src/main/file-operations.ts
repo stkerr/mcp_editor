@@ -432,7 +432,9 @@ export const promptHierarchyManager = {
       // Mark the existing prompt as interrupted
       existingPrompt.status = 'interrupted';
       existingPrompt.endTime = new Date(timestamp);
-      console.log(`Marked prompt ${existingPrompt.promptId} for session ${sessionId} as interrupted`);
+      // Calculate and store the duration
+      existingPrompt.duration = new Date(timestamp).getTime() - new Date(existingPrompt.startTime).getTime();
+      console.log(`Marked prompt ${existingPrompt.promptId} for session ${sessionId} as interrupted with duration ${existingPrompt.duration}ms`);
     }
     
     // Generate a unique prompt ID
@@ -461,7 +463,9 @@ export const promptHierarchyManager = {
     if (prompt && prompt.status === 'active') {
       prompt.status = 'completed';
       prompt.endTime = new Date(timestamp);
-      console.log(`Marked prompt ${prompt.promptId} for session ${sessionId} as completed`);
+      // Calculate and store the duration
+      prompt.duration = new Date(timestamp).getTime() - new Date(prompt.startTime).getTime();
+      console.log(`Marked prompt ${prompt.promptId} for session ${sessionId} as completed with duration ${prompt.duration}ms`);
     } else {
       console.log(`No active prompt found for session ${sessionId}`);
     }
