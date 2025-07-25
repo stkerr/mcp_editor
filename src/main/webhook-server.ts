@@ -310,7 +310,7 @@ export class WebhookServer {
               startTime: new Date(eventData.timestamp),
               endTime: new Date(eventData.timestamp),
               status: 'completed',
-              description: '✅ Session completed',
+              description: 'Session completed',
               toolsUsed: ['Stop'],
               lastActivity: new Date(eventData.timestamp)
             };

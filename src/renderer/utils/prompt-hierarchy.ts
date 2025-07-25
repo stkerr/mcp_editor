@@ -204,7 +204,7 @@ export function buildPromptHierarchy(
     
     // First, check if any event is a UserPromptSubmit event with prompt text
     const promptSubmitEvent = events.find(e => 
-      e.description === '⚡ Prompt started' && 
+      e.description === 'Prompt started' && 
       e.toolsUsed.includes('UserPromptSubmit') &&
       e.toolInput?.prompt
     );
