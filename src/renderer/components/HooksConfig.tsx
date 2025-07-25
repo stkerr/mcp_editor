@@ -115,7 +115,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         ],
         PreToolUse: [
           {
-            matcher: "Task",
+            matcher: ".*",
             hooks: [
               {
                 type: "command", 
@@ -126,7 +126,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         ],
         PostToolUse: [
           {
-            matcher: "Task",
+            matcher: ".*",
             hooks: [
               {
                 type: "command", 
@@ -175,7 +175,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
       ],
       PreToolUse: [
         {
-          matcher: "Task",
+          matcher: ".*",
           hooks: [
             {
               type: "command", 
@@ -186,7 +186,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
       ],
       PostToolUse: [
         {
-          matcher: "Task",
+          matcher: ".*",
           hooks: [
             {
               type: "command", 

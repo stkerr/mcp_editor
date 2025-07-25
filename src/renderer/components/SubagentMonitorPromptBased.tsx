@@ -6,6 +6,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { SubagentDetailsModal } from './SubagentDetailsModal';
 import { buildPromptHierarchy, PromptInfo, PromptTreeNode, TaskGroupNode, formatPromptDuration } from '../utils/prompt-hierarchy';
 import { IPC_CHANNELS } from '../../shared/constants';
+import { getTaskGroupEmoji } from '../utils/tool-emojis';
 
 // Type augmentation for window
 declare global {
@@ -324,7 +325,7 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h4 className="font-medium text-sm truncate">
-                  {taskGroup.description}
+                  {getTaskGroupEmoji(taskGroup.events)} {taskGroup.description}
                 </h4>
                 {taskGroup.status && (
                   <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(taskGroup.status)}`}>
