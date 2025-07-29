@@ -41,6 +41,7 @@ export interface SubagentInfo {
   id: string;
   sessionId: string;
   parentPromptId?: string; // Links this event to its parent UserPromptSubmit
+  correlationId?: string; // Links PreToolUse and PostToolUse events
   startTime: Date;
   endTime?: Date;
   status: 'active' | 'completed' | 'failed' | '';

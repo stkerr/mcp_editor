@@ -4,6 +4,7 @@ import { BrowserWindow } from 'electron';
 import { SubagentInfo } from '../shared/types';
 import { addSubagentInfo } from './subagent-queue';
 import { IPC_CHANNELS } from '../shared/constants';
+import { cleanupStaleActiveEvents } from './file-operations';
 
 interface WebhookEvent {
   sessionId: string;
@@ -18,6 +19,10 @@ interface WebhookEvent {
 export class WebhookServer {
   private server: Server | null = null;
   private port: number = 3001;
+  // Map to store correlation IDs between PreToolUse and PostToolUse events
+  // Key format: sessionId-toolName-description
+  private correlationMap: Map<string, string> = new Map();
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(port: number = 3001) {
     this.port = port;
@@ -29,6 +34,22 @@ export class WebhookServer {
       
       this.server.listen(this.port, 'localhost', () => {
         console.log(`Webhook server listening on http://localhost:${this.port}`);
+        
+        // Set up periodic cleanup of stale active events (every 5 minutes)
+        this.cleanupInterval = setInterval(async () => {
+          try {
+            const cleaned = await cleanupStaleActiveEvents(30); // Mark as abandoned after 30 minutes
+            if (cleaned > 0) {
+              console.log(`Cleanup: marked ${cleaned} stale events as abandoned`);
+            }
+          } catch (error) {
+            console.error('Error during periodic cleanup:', error);
+          }
+        }, 5 * 60 * 1000); // Run every 5 minutes
+        
+        // Run initial cleanup on startup
+        cleanupStaleActiveEvents(30).catch(console.error);
+        
         resolve();
       });
 
@@ -41,6 +62,12 @@ export class WebhookServer {
 
   async stop(): Promise<void> {
     return new Promise((resolve) => {
+      // Clear the cleanup interval
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
+      }
+      
       if (this.server) {
         this.server.close(() => {
           console.log('Webhook server stopped');
@@ -158,7 +185,8 @@ export class WebhookServer {
       eventType,
       timestamp,
       transcriptPath: hookInput.transcript_path,
-      hookEventName: hookInput.hook_event_name
+      hookEventName: hookInput.hook_event_name,
+      toolName: hookInput.tool_name
     };
 
     // For PostToolUse, extract the task description from tool_input
@@ -184,6 +212,21 @@ export class WebhookServer {
     if (eventData.eventType === 'subagent-stop') {
       // For subagent-stop, we need to find the matching subagent
       const description = (eventData as any).taskDescription || this.extractDescription(eventData);
+      const toolName = (eventData as any).toolName || eventData.toolInput?.tool_name || 'unknown';
+      
+      // First, try to find correlation ID
+      let correlationId: string | undefined;
+      if ((eventData as any).hookEventName === 'PostToolUse') {
+        const correlationKey = `${eventData.sessionId}-${toolName}-${description}`;
+        correlationId = this.correlationMap.get(correlationKey);
+        if (correlationId) {
+          console.log(`Found correlation ID ${correlationId} for PostToolUse event`);
+          // Clean up the correlation mapping
+          this.correlationMap.delete(correlationKey);
+        } else {
+          console.log(`No correlation ID found for key: ${correlationKey}`);
+        }
+      }
       
       if (!description || description === 'subagent-stop event') {
         console.error('PostToolUse event has no meaningful description - cannot match subagent');
@@ -219,6 +262,7 @@ export class WebhookServer {
         id: `${eventData.sessionId}-${Date.now()}-stop`, // Temporary ID for matching
         sessionId: eventData.sessionId,
         parentPromptId,
+        correlationId, // Include the correlation ID if found
         startTime: new Date(eventData.timestamp), // Will be merged with existing start time
         endTime: new Date(eventData.timestamp),
         status: 'completed',
@@ -259,6 +303,25 @@ export class WebhookServer {
       const timestamp = Date.now();
       const uniqueId = `${eventData.sessionId}-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
       
+      // Generate correlation ID for PreToolUse events
+      let correlationId: string | undefined;
+      const toolName = (eventData as any).toolName || eventData.toolInput?.tool_name || 'unknown';
+      
+      if ((eventData as any).hookEventName === 'PreToolUse') {
+        // Generate a unique correlation ID
+        correlationId = `corr-${uniqueId}`;
+        
+        // Store it in our map with a composite key
+        const correlationKey = `${eventData.sessionId}-${toolName}-${description}`;
+        this.correlationMap.set(correlationKey, correlationId);
+        console.log(`Generated correlation ID ${correlationId} for key: ${correlationKey}`);
+        
+        // Clean up old entries (older than 5 minutes)
+        setTimeout(() => {
+          this.correlationMap.delete(correlationKey);
+        }, 5 * 60 * 1000);
+      }
+      
       // Get the active prompt ID for this session
       const promptManager = (global as any).promptHierarchyManager;
       const parentPromptId = promptManager?.getActivePromptForSession(eventData.sessionId);
@@ -267,6 +330,7 @@ export class WebhookServer {
         id: uniqueId, // Unique ID for each subagent
         sessionId: eventData.sessionId,
         parentPromptId,
+        correlationId,
         startTime: new Date(eventData.timestamp),
         status: 'active',
         description: description,
@@ -410,13 +474,52 @@ export class WebhookServer {
   }
 
   private extractDescription(eventData: WebhookEvent): string {
+    // First priority: explicit description
     if (eventData.toolInput?.description) {
       return eventData.toolInput.description;
     }
+    
+    // Second priority: prompt text
     if (eventData.toolInput?.prompt) {
-      return eventData.toolInput.prompt.substring(0, 100) + '...';
+      const prompt = eventData.toolInput.prompt;
+      return prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt;
     }
-    return `${eventData.eventType} event`;
+    
+    // Third priority: construct from tool name and input
+    const toolName = (eventData as any).toolName || eventData.toolInput?.tool_name || 'Unknown Tool';
+    
+    // Try to extract meaningful information from tool input
+    if (eventData.toolInput) {
+      // For Bash commands
+      if (toolName === 'Bash' && eventData.toolInput.command) {
+        const cmd = eventData.toolInput.command;
+        return `Bash: ${cmd.length > 50 ? cmd.substring(0, 50) + '...' : cmd}`;
+      }
+      
+      // For file operations
+      if ((toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') && eventData.toolInput.file_path) {
+        const fileName = eventData.toolInput.file_path.split('/').pop() || 'unknown';
+        return `${toolName}: ${fileName}`;
+      }
+      
+      // For grep/search operations
+      if (toolName === 'Grep' && eventData.toolInput.pattern) {
+        return `Grep: "${eventData.toolInput.pattern}"`;
+      }
+      
+      // Generic case: use tool name + first meaningful parameter
+      const params = Object.entries(eventData.toolInput)
+        .filter(([key, value]) => key !== 'tool_name' && value)
+        .map(([key, value]) => `${key}=${String(value).substring(0, 20)}`);
+      
+      if (params.length > 0) {
+        return `${toolName}: ${params[0]}`;
+      }
+    }
+    
+    // Last resort: tool name + event type + timestamp
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    return `${toolName} (${timestamp})`;
   }
 
   private extractToolsUsed(eventData: WebhookEvent): string[] {

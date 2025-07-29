@@ -315,17 +315,31 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
   
   // For stop events, try to find the matching active subagent
   if (subagent.status === 'completed' && subagent.id.endsWith('-stop')) {
-    // We MUST have a description from PostToolUse to match properly
-    const matchDescription = (subagent as any).matchDescription;
     let matchingSubagent = null;
     
-    if (matchDescription) {
-      // Try exact description match
+    // First priority: Try to match by correlation ID
+    if (subagent.correlationId) {
       matchingSubagent = existingData.find(s => 
-        s.sessionId === subagent.sessionId && 
-        s.status === 'active' && 
-        s.description === matchDescription
+        s.correlationId === subagent.correlationId && 
+        s.status === 'active'
       );
+      
+      if (matchingSubagent) {
+        console.log(`Found exact match by correlation ID: ${subagent.correlationId}`);
+      }
+    }
+    
+    // Second priority: Try description matching if no correlation match
+    if (!matchingSubagent) {
+      const matchDescription = (subagent as any).matchDescription;
+      
+      if (matchDescription) {
+        // Try exact description match
+        matchingSubagent = existingData.find(s => 
+          s.sessionId === subagent.sessionId && 
+          s.status === 'active' && 
+          s.description === matchDescription
+        );
       
       if (matchingSubagent) {
         console.log(`Found exact match by description: "${matchDescription}" -> matched to subagent ${matchingSubagent.id}`);
@@ -351,12 +365,39 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
           console.log(`Found partial match by description: "${matchDescription}" ~= "${matchingSubagent.description}"`);
         }
       }
+      }
     } else {
       console.warn('PostToolUse event missing description - cannot reliably match subagent');
       // Without a description, we cannot reliably match the completion event
       // Log this as an error condition
       const activeOnes = existingData.filter(s => s.sessionId === subagent.sessionId && s.status === 'active');
       console.error(`Cannot match completion event without description. ${activeOnes.length} active subagents found.`);
+    }
+    
+    // Third priority: Timestamp-based matching as last resort
+    if (!matchingSubagent) {
+      // Look for the most recent active subagent with the same tool in the same session
+      const toolName = subagent.toolsUsed?.[0] || 'Task';
+      const candidateSubagents = existingData
+        .filter(s => 
+          s.sessionId === subagent.sessionId && 
+          s.status === 'active' &&
+          s.toolsUsed.includes(toolName)
+        )
+        .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+      
+      if (candidateSubagents.length > 0) {
+        // Check if the most recent one started within a reasonable time window (e.g., 30 seconds)
+        const mostRecent = candidateSubagents[0];
+        const timeDiff = new Date(subagent.endTime!).getTime() - new Date(mostRecent.startTime).getTime();
+        
+        if (timeDiff > 0 && timeDiff < 30000) { // 30 second window
+          matchingSubagent = mostRecent;
+          console.log(`Found match by timestamp proximity: ${mostRecent.description} (started ${timeDiff}ms ago)`);
+        } else {
+          console.log(`Most recent ${toolName} subagent started ${timeDiff}ms ago - too far for reliable matching`);
+        }
+      }
     }
     
     if (matchingSubagent) {
@@ -405,11 +446,7 @@ export async function addSubagentInfo(subagent: SubagentInfo): Promise<void> {
   await writeSubagentData(limitedData);
 }
 
-export async function clearSubagentData(): Promise<void> {
-  await writeSubagentData([]);
-  // Also clear in-memory prompt hierarchy data
-  promptHierarchyManager.clearAllPrompts();
-}
+// Moved to after promptHierarchyManager definition
 
 // Enhanced prompt hierarchy management
 interface PromptInfo {
@@ -419,6 +456,7 @@ interface PromptInfo {
   endTime?: Date;
   status: 'active' | 'completed' | 'interrupted';
   promptText: string;
+  duration?: number;
 }
 
 const activePrompts = new Map<string, PromptInfo>();
@@ -501,3 +539,54 @@ export const promptHierarchyManager = {
     console.log('Cleared all prompt hierarchy data from memory');
   }
 };
+
+// Clear all subagent data
+export async function clearSubagentData(): Promise<void> {
+  await writeSubagentData([]);
+  // Also clear in-memory prompt hierarchy data
+  promptHierarchyManager.clearAllPrompts();
+}
+
+// Clean up stale active events that have been running for too long
+export async function cleanupStaleActiveEvents(maxAgeMinutes: number = 30): Promise<number> {
+  try {
+    const existingData = await readSubagentData();
+    const now = new Date();
+    const maxAgeMs = maxAgeMinutes * 60 * 1000;
+    let cleanedCount = 0;
+    
+    const updatedData = existingData.map(subagent => {
+      if (subagent.status === 'active') {
+        const age = now.getTime() - new Date(subagent.startTime).getTime();
+        
+        if (age > maxAgeMs) {
+          cleanedCount++;
+          console.log(`Marking stale active event as abandoned: ${subagent.description} (age: ${Math.round(age / 60000)}m)`);
+          
+          return {
+            ...subagent,
+            status: 'failed' as const,
+            endTime: now,
+            description: `${subagent.description} (abandoned after ${maxAgeMinutes}m)`,
+            lastActivity: now
+          };
+        }
+      }
+      
+      return subagent;
+    });
+    
+    if (cleanedCount > 0) {
+      await writeSubagentData(updatedData);
+      console.log(`Cleaned up ${cleanedCount} stale active events`);
+    }
+    
+    return cleanedCount;
+  } catch (error) {
+    console.error('Error cleaning up stale events:', error);
+    return 0;
+  }
+}
+
+// Make promptHierarchyManager available globally for the webhook server
+(global as any).promptHierarchyManager = promptHierarchyManager;
