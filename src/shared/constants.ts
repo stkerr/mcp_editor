@@ -31,7 +31,8 @@ export const IPC_CHANNELS = {
   GET_USAGE_DATA: 'usage:get-data',
   WEBHOOK_SERVER_STATUS: 'webhook:status',
   PROMPT_UPDATE: 'prompts:update',
-  GET_PROMPTS: 'prompts:get'
+  GET_PROMPTS: 'prompts:get',
+  GET_DAG_STATE: 'dag:get-state'
 };
 
 export const SUBAGENT_DATA_PATHS: ConfigPaths = {

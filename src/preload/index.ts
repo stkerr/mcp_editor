@@ -18,7 +18,8 @@ const IPC_CHANNELS = {
   GET_USAGE_DATA: 'usage:get-data',
   WEBHOOK_SERVER_STATUS: 'webhook:status',
   PROMPT_UPDATE: 'prompts:update',
-  GET_PROMPTS: 'prompts:get'
+  GET_PROMPTS: 'prompts:get',
+  GET_DAG_STATE: 'dag:get-state'
 };
 
 const configAPI = {
@@ -74,7 +75,10 @@ const configAPI = {
   },
   
   getPrompts: () => 
-    ipcRenderer.invoke(IPC_CHANNELS.GET_PROMPTS)
+    ipcRenderer.invoke(IPC_CHANNELS.GET_PROMPTS),
+  
+  getDAGState: () => 
+    ipcRenderer.invoke(IPC_CHANNELS.GET_DAG_STATE)
 };
 
 contextBridge.exposeInMainWorld('configAPI', configAPI);

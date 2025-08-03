@@ -179,4 +179,50 @@ export function setupConfigHandlers() {
       };
     }
   });
+  
+  // Get DAG state for debugging
+  ipcMain.handle(IPC_CHANNELS.GET_DAG_STATE, async () => {
+    console.log('\n[IPC DEBUG] GET_DAG_STATE handler called');
+    try {
+      // Check if global object exists
+      console.log('[IPC DEBUG] Global object exists:', typeof global !== 'undefined');
+      console.log('[IPC DEBUG] Global keys:', Object.keys(global as any));
+      
+      const webhookServer = (global as any).webhookServer;
+      console.log('[IPC DEBUG] webhookServer from global:', {
+        exists: !!webhookServer,
+        type: typeof webhookServer,
+        isObject: webhookServer && typeof webhookServer === 'object',
+        hasGetDAGState: webhookServer && typeof webhookServer.getDAGState === 'function'
+      });
+      
+      if (webhookServer) {
+        console.log('[IPC DEBUG] Calling webhookServer.getDAGState()');
+        const dagState = webhookServer.getDAGState();
+        console.log('[IPC DEBUG] DAG state returned:', {
+          type: typeof dagState,
+          sessionCount: dagState?.sessionCount,
+          sessionsKeys: dagState?.sessions ? Object.keys(dagState.sessions) : 'no sessions object',
+          fullData: JSON.stringify(dagState, null, 2).substring(0, 500) + '...'
+        });
+        
+        const result = { success: true, data: dagState };
+        console.log('[IPC DEBUG] Returning success result');
+        return result;
+      } else {
+        console.log('[IPC DEBUG] webhookServer not found, returning empty state');
+        const emptyResult = { success: true, data: { sessionCount: 0, sessions: {} } };
+        console.log('[IPC DEBUG] Empty result:', emptyResult);
+        return emptyResult;
+      }
+    } catch (error) {
+      console.error('[IPC DEBUG] Error in GET_DAG_STATE handler:', error);
+      const errorResult = { 
+        success: false, 
+        error: `Failed to get DAG state: ${(error as Error).message}` 
+      };
+      console.log('[IPC DEBUG] Returning error result:', errorResult);
+      return errorResult;
+    }
+  });
 }

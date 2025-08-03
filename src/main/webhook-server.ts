@@ -5,6 +5,8 @@ import { SubagentInfo } from '../shared/types';
 import { addSubagentInfo } from './subagent-queue';
 import { IPC_CHANNELS } from '../shared/constants';
 import { cleanupStaleActiveEvents } from './file-operations';
+import { ClaudeCodeEventType } from '../shared/claudeCodeTypes';
+import { ClaudeCodeSessionDAG } from '../renderer/utils/claudeCodeSessionDAG';
 
 interface WebhookEvent {
   sessionId: string;
@@ -23,6 +25,9 @@ export class WebhookServer {
   // Key format: sessionId-toolName-description
   private correlationMap: Map<string, string> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  
+  // Global DAG instance for tracking Claude Code sessions
+  private sessionDAG: ClaudeCodeSessionDAG = new ClaudeCodeSessionDAG();
 
   constructor(port: number = 3001) {
     this.port = port;
@@ -208,6 +213,13 @@ export class WebhookServer {
 
   private async processWebhookEvent(eventData: WebhookEvent): Promise<void> {
     console.log('Processing webhook event:', eventData);
+    
+    // Add event to DAG
+    try {
+      await this.addEventToDAG(eventData);
+    } catch (error) {
+      console.error('Failed to add event to DAG:', error);
+    }
 
     if (eventData.eventType === 'subagent-stop') {
       // For subagent-stop, we need to find the matching subagent
@@ -588,5 +600,209 @@ export class WebhookServer {
 
   getPort(): number {
     return this.port;
+  }
+  
+  // Get the current state of the DAG for debugging
+  getDAGState(): any {
+    console.log('\n[WEBHOOK DEBUG] getDAGState() called');
+    
+    // Check sessionDAG exists
+    console.log('[WEBHOOK DEBUG] sessionDAG exists:', !!this.sessionDAG);
+    console.log('[WEBHOOK DEBUG] sessionDAG type:', typeof this.sessionDAG);
+    
+    const sessions = this.sessionDAG.getSessions();
+    console.log('[WEBHOOK DEBUG] sessionDAG.getSessions() returned:', {
+      type: typeof sessions,
+      isArray: Array.isArray(sessions),
+      length: sessions?.length,
+      sessions: sessions
+    });
+    
+    const state: any = {
+      sessionCount: sessions.length,
+      sessions: {}
+    };
+    
+    console.log('[WEBHOOK DEBUG] Processing', sessions.length, 'sessions');
+    
+    sessions.forEach((sessionId, index) => {
+      console.log(`[WEBHOOK DEBUG] Processing session ${index + 1}/${sessions.length}: ${sessionId}`);
+      
+      const nodes = this.sessionDAG.getSessionNodes(sessionId);
+      console.log(`[WEBHOOK DEBUG] Session ${sessionId} nodes:`, {
+        type: typeof nodes,
+        isArray: Array.isArray(nodes),
+        length: nodes?.length
+      });
+      
+      const processedNodes = nodes.map(node => {
+        const description = this.extractDescriptionFromNode(node);
+        const processedNode = {
+          id: node.id,
+          eventType: node.eventType,
+          timeReceived: node.timeReceived.toISOString(),
+          parentId: node.parentId,
+          childIds: node.childIds,
+          sessionId: node.sessionId,
+          rawBody: node.rawBody,
+          description: description
+        };
+        console.log(`[WEBHOOK DEBUG] Processed node ${node.id}:`, {
+          eventType: node.eventType,
+          description: description.substring(0, 50) + '...',
+          hasRawBody: !!node.rawBody
+        });
+        return processedNode;
+      });
+      
+      state.sessions[sessionId] = {
+        sessionId: sessionId,
+        nodeCount: nodes.length,
+        nodes: processedNodes
+      };
+      
+      console.log(`[WEBHOOK DEBUG] Session ${sessionId} processed:`, {
+        nodeCount: nodes.length,
+        processedNodesCount: processedNodes.length
+      });
+    });
+    
+    console.log('[WEBHOOK DEBUG] Final state summary:', {
+      sessionCount: state.sessionCount,
+      sessionsKeys: Object.keys(state.sessions),
+      totalNodesAcrossAllSessions: Object.values(state.sessions).reduce((total: number, session: any) => total + session.nodeCount, 0)
+    });
+    
+    // Log a snippet of the full state for debugging
+    const stateStr = JSON.stringify(state, null, 2);
+    console.log('[WEBHOOK DEBUG] State JSON (first 800 chars):', stateStr.substring(0, 800) + (stateStr.length > 800 ? '...' : ''));
+    
+    return state;
+  }
+  
+  private extractDescriptionFromNode(node: any): string {
+    // Try to extract a meaningful description from the node's raw body
+    if (node.rawBody?.toolInput?.description) {
+      return node.rawBody.toolInput.description;
+    }
+    if (node.rawBody?.promptText) {
+      return node.rawBody.promptText;
+    }
+    if (node.rawBody?.taskDescription) {
+      return node.rawBody.taskDescription;
+    }
+    return node.eventType;
+  }
+  
+  private async addEventToDAG(eventData: any): Promise<void> {
+    const sessionId = eventData.sessionId;
+    const hookEventName = (eventData as any).hookEventName || '';
+    
+    // Map webhook event names to our event types
+    let eventType = ClaudeCodeEventType.Unknown;
+    
+    // Check if this is a session start (first event for a session)
+    const sessions = this.sessionDAG.getSessions();
+    const isNewSession = !sessions.includes(sessionId);
+    
+    if (isNewSession) {
+      // Create new session
+      console.log(`\n[DAG] Creating new session: ${sessionId}`);
+      this.sessionDAG.addSession(sessionId, {
+        startTime: eventData.timestamp,
+        hookEventName: 'SessionStart'
+      });
+    }
+    
+    // Map hook event names to our event types
+    switch (hookEventName) {
+      case 'UserPromptSubmit':
+        eventType = ClaudeCodeEventType.UserPromptSubmit;
+        break;
+      case 'PreToolUse':
+        eventType = ClaudeCodeEventType.PreToolUse;
+        break;
+      case 'PostToolUse':
+        eventType = ClaudeCodeEventType.PostToolUse;
+        break;
+      case 'Stop':
+        eventType = ClaudeCodeEventType.Stop;
+        break;
+      case 'SubagentStop':
+        eventType = ClaudeCodeEventType.SubagentStop;
+        break;
+      case 'Notification':
+        eventType = ClaudeCodeEventType.Notification;
+        break;
+      case 'PreCompact':
+        eventType = ClaudeCodeEventType.PreCompact;
+        break;
+      default:
+        // Handle eventData.eventType as fallback
+        if (eventData.eventType === 'prompt-submit') {
+          eventType = ClaudeCodeEventType.UserPromptSubmit;
+        } else if (eventData.eventType === 'stop') {
+          eventType = ClaudeCodeEventType.Stop;
+        } else if (eventData.eventType === 'subagent-stop') {
+          eventType = ClaudeCodeEventType.SubagentStop;
+        }
+    }
+    
+    // Determine parent node
+    let parentId: string | undefined;
+    
+    if (eventType === ClaudeCodeEventType.UserPromptSubmit) {
+      // UserPromptSubmit is child of session root
+      const rootNode = this.sessionDAG.getSessionRoot(sessionId);
+      parentId = rootNode?.id;
+    } else {
+      // For other events, try to find appropriate parent
+      // First, check if we have an active prompt ID
+      const promptManager = (global as any).promptHierarchyManager;
+      const activePromptId = promptManager?.getActivePromptForSession(sessionId);
+      
+      if (activePromptId) {
+        // Find the UserPromptSubmit node with this prompt ID
+        const sessionNodes = this.sessionDAG.getSessionNodes(sessionId);
+        const promptNode = sessionNodes.find(node => 
+          node.eventType === ClaudeCodeEventType.UserPromptSubmit &&
+          node.rawBody?.promptId === activePromptId
+        );
+        if (promptNode) {
+          parentId = promptNode.id;
+        }
+      }
+      
+      // If no parent found, attach to the most recent UserPromptSubmit
+      if (!parentId) {
+        const sessionNodes = this.sessionDAG.getSessionNodes(sessionId);
+        const promptNodes = sessionNodes
+          .filter(node => node.eventType === ClaudeCodeEventType.UserPromptSubmit)
+          .sort((a, b) => b.timeReceived.getTime() - a.timeReceived.getTime());
+        
+        if (promptNodes.length > 0) {
+          parentId = promptNodes[0].id;
+        }
+      }
+    }
+    
+    // Add the event to the DAG
+    const newNode = this.sessionDAG.addEvent(
+      sessionId,
+      eventType,
+      eventData, // Store entire event as raw body
+      parentId
+    );
+    
+    console.log(`[DAG] Added ${eventType} event to session ${sessionId}`);
+    console.log(`[DAG] Node ID: ${newNode.id}, Parent: ${parentId || 'root'}`);
+    
+    // Log current DAG state summary
+    const allSessions = this.sessionDAG.getSessions();
+    console.log(`[DAG] Total sessions: ${allSessions.length}`);
+    allSessions.forEach(sid => {
+      const nodes = this.sessionDAG.getSessionNodes(sid);
+      console.log(`[DAG] Session ${sid}: ${nodes.length} nodes`);
+    });
   }
 }

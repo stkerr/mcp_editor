@@ -200,6 +200,15 @@ if (handleWebhookArgument()) {
       await webhookServer.start();
       console.log('Webhook server started successfully');
       
+      // Store webhook server globally so IPC handlers can access it
+      (global as any).webhookServer = webhookServer;
+      console.log('[MAIN DEBUG] Webhook server stored globally at', new Date().toISOString());
+      console.log('[MAIN DEBUG] Global webhook server verification:', {
+        stored: !!((global as any).webhookServer),
+        hasGetDAGState: !!((global as any).webhookServer?.getDAGState),
+        serverPort: webhookServer.getPort()
+      });
+      
       // Send status to any existing windows
       const windows = BrowserWindow.getAllWindows();
       windows.forEach(window => {
