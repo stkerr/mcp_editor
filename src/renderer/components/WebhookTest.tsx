@@ -3,9 +3,10 @@ import { AlertCircle, CheckCircle, Loader2, Zap } from 'lucide-react';
 
 interface WebhookTestProps {
   webhookPort: string;
+  singleEndpoint?: boolean;
 }
 
-export function WebhookTest({ webhookPort }: WebhookTestProps) {
+export function WebhookTest({ webhookPort, singleEndpoint = true }: WebhookTestProps) {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
@@ -32,7 +33,8 @@ export function WebhookTest({ webhookPort }: WebhookTestProps) {
         timestamp: new Date().toISOString()
       };
 
-      const response = await fetch(`http://localhost:${webhookPort}/tool-event`, {
+      const endpoint = singleEndpoint ? 'webhook' : 'tool-event';
+      const response = await fetch(`http://localhost:${webhookPort}/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,7 +68,7 @@ export function WebhookTest({ webhookPort }: WebhookTestProps) {
           timestamp: new Date().toISOString()
         };
 
-        await fetch(`http://localhost:${webhookPort}/tool-event`, {
+        await fetch(`http://localhost:${webhookPort}/${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

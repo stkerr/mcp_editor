@@ -15,6 +15,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   const [appPath, setAppPath] = useState('');
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [hooksConfigured, setHooksConfigured] = useState<boolean | null>(null);
+  const [singleEndpoint, setSingleEndpoint] = useState(true); // Default to single endpoint mode
   // Default to production mode unless we detect development environment
   const [isDevelopment, setIsDevelopment] = useState(
     window.location.hostname === 'localhost' || 
@@ -45,7 +46,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
   };
 
   const generateHooksConfig = (): ClaudeCodeHooks => {
-    const webhookPort = 3001;
+    const portNum = parseInt(webhookPort) || 3001;
     const executablePath = appPath || getDefaultAppPath();
     
     // Determine the webhook relay script path
@@ -77,68 +78,25 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
       }
     }
     
-    if (isDevelopment) {
-      // For development, use the webhook relay script with the endpoint as argument
-      return {
-        UserPromptSubmit: [
-          {
-            matcher: ".*",
-            hooks: [
-              {
-                type: "command",
-                command: `"${relayScriptPath}" http://localhost:${webhookPort}/prompt-event`
-              }
-            ]
-          }
-        ],
-        Stop: [
-          {
-            matcher: ".*",
-            hooks: [
-              {
-                type: "command",
-                command: `"${relayScriptPath}" http://localhost:${webhookPort}/stop-event`
-              }
-            ]
-          }
-        ],
-        SubagentStop: [
-          {
-            matcher: ".*",
-            hooks: [
-              {
-                type: "command",
-                command: `"${relayScriptPath}" http://localhost:${webhookPort}/subagent-event`
-              }
-            ]
-          }
-        ],
-        PreToolUse: [
-          {
-            matcher: ".*",
-            hooks: [
-              {
-                type: "command", 
-                command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
-              }
-            ]
-          }
-        ],
-        PostToolUse: [
-          {
-            matcher: ".*",
-            hooks: [
-              {
-                type: "command", 
-                command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
-              }
-            ]
-          }
-        ]
+    // Create base webhook endpoint or specific endpoints based on mode
+    const getWebhookEndpoint = (eventType?: string) => {
+      if (singleEndpoint) {
+        return `http://localhost:${portNum}/webhook`;
+      }
+      
+      // Multiple endpoint mode - use specific endpoints for each event type
+      const endpointMap: { [key: string]: string } = {
+        'UserPromptSubmit': '/prompt-event',
+        'Stop': '/stop-event',
+        'SubagentStop': '/subagent-event',
+        'PreToolUse': '/tool-event',
+        'PostToolUse': '/tool-event'
       };
-    }
+      
+      const specificEndpoint = eventType ? endpointMap[eventType] : '/webhook';
+      return `http://localhost:${portNum}${specificEndpoint}`;
+    };
     
-    // For production builds
     return {
       UserPromptSubmit: [
         {
@@ -146,7 +104,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           hooks: [
             {
               type: "command",
-              command: `"${relayScriptPath}" http://localhost:${webhookPort}/prompt-event`
+              command: `"${relayScriptPath}" ${getWebhookEndpoint('UserPromptSubmit')}`
             }
           ]
         }
@@ -157,7 +115,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           hooks: [
             {
               type: "command",
-              command: `"${relayScriptPath}" http://localhost:${webhookPort}/stop-event`
+              command: `"${relayScriptPath}" ${getWebhookEndpoint('Stop')}`
             }
           ]
         }
@@ -168,7 +126,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           hooks: [
             {
               type: "command",
-              command: `"${relayScriptPath}" http://localhost:${webhookPort}/subagent-event`
+              command: `"${relayScriptPath}" ${getWebhookEndpoint('SubagentStop')}`
             }
           ]
         }
@@ -179,7 +137,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           hooks: [
             {
               type: "command", 
-              command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
+              command: `"${relayScriptPath}" ${getWebhookEndpoint('PreToolUse')}`
             }
           ]
         }
@@ -190,7 +148,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           hooks: [
             {
               type: "command", 
-              command: `"${relayScriptPath}" http://localhost:${webhookPort}/tool-event`
+              command: `"${relayScriptPath}" ${getWebhookEndpoint('PostToolUse')}`
             }
           ]
         }
@@ -219,12 +177,12 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
     };
     
     checkHooks();
-  }, [webhookPort, appPath, isDevelopment]); // Re-check when config parameters change
+  }, [webhookPort, appPath, isDevelopment, singleEndpoint]); // Re-check when config parameters change
 
   // Reset applied state when configuration changes
   useEffect(() => {
     setApplied(false);
-  }, [webhookPort, appPath, isDevelopment]);
+  }, [webhookPort, appPath, isDevelopment, singleEndpoint]);
 
   const handleCopy = async () => {
     try {
@@ -347,9 +305,35 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         </div>
       )}
 
-      <WebhookTest webhookPort={webhookPort} />
+      <WebhookTest webhookPort={webhookPort} singleEndpoint={singleEndpoint} />
 
       <div className="space-y-4">
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium">
+              Webhook Endpoint Mode
+            </label>
+            <button
+              onClick={() => setSingleEndpoint(!singleEndpoint)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                singleEndpoint ? 'bg-primary' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  singleEndpoint ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {singleEndpoint 
+              ? 'Single endpoint: All events sent to /webhook (simpler configuration)'
+              : 'Multiple endpoints: Each event type uses its own endpoint (advanced)'
+            }
+          </p>
+        </div>
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium">
@@ -418,7 +402,9 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
         <div className="flex items-center justify-between p-3 border-b bg-muted/50">
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4" />
-            <span className="font-medium">Generated Hooks Configuration</span>
+            <span className="font-medium">
+              Generated Hooks Configuration {singleEndpoint ? '(Single Endpoint)' : '(Multiple Endpoints)'}
+            </span>
           </div>
           <div className="flex gap-2">
             <button
@@ -492,6 +478,11 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
           <li>• Ensure MCP Editor is running before using Claude Code subagents</li>
           <li>• Check that port {webhookPort} is not blocked by firewall</li>
           <li>• The app must be running to receive webhook events</li>
+          {singleEndpoint ? (
+            <li>• Single endpoint mode sends all events to /webhook (recommended for most users)</li>
+          ) : (
+            <li>• Multiple endpoint mode uses separate paths for different event types</li>
+          )}
         </ul>
       </div>
     </div>

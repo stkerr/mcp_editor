@@ -100,7 +100,8 @@ export class WebhookServer {
     const pathname = parsedUrl.pathname;
 
     try {
-      if (req.method === 'POST' && (pathname === '/subagent-event' || pathname === '/tool-event' || pathname === '/stop-event' || pathname === '/prompt-event')) {
+      if (req.method === 'POST' && (pathname === '/webhook' || pathname === '/subagent-event' || pathname === '/tool-event' || pathname === '/stop-event' || pathname === '/prompt-event')) {
+        // Single endpoint /webhook now supported alongside legacy endpoints
         await this.handleWebhookEvent(req, res);
       } else if (req.method === 'GET' && pathname === '/health') {
         this.handleHealthCheck(res);
