@@ -5,6 +5,7 @@ import { GroupedConfigList } from './components/GroupedConfigList';
 import { TabNavigation } from './components/TabNavigation';
 import { SubagentMonitor } from './components/SubagentMonitorPromptBased';
 import { ClaudeUsage } from './components/ClaudeUsage';
+import { ClaudeCodeFeatures } from './components/ClaudeCodeFeatures';
 import { Check, AlertCircle, Server } from 'lucide-react';
 
 // Type augmentation for window
@@ -73,9 +74,9 @@ function App() {
   useEffect(() => {
     if (selectedApp) {
       loadConfig();
-      // Reset to servers view when switching to Claude Desktop and viewing subagents
-      // (Claude Desktop doesn't have subagents, but usage is available for both)
-      if (selectedApp === 'desktop' && selectedView === 'subagents') {
+      // Reset to servers view when switching to Claude Desktop and viewing subagents or claude-code-features
+      // (Claude Desktop doesn't have subagents or claude-code-features, but usage is available for both)
+      if (selectedApp === 'desktop' && (selectedView === 'subagents' || selectedView === 'claude-code-features')) {
         setSelectedView('servers');
       }
     }
@@ -249,6 +250,8 @@ function App() {
               <SubagentMonitor selectedApp={selectedApp} />
             ) : selectedView === 'usage' ? (
               <ClaudeUsage />
+            ) : selectedView === 'claude-code-features' ? (
+              <ClaudeCodeFeatures />
             ) : null}
           </>
         )}

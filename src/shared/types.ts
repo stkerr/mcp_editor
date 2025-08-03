@@ -35,7 +35,7 @@ export interface ConfigPaths {
   linux: string;
 }
 
-export type ViewType = 'servers' | 'subagents' | 'usage';
+export type ViewType = 'servers' | 'subagents' | 'usage' | 'claude-code-features';
 
 export interface SubagentInfo {
   id: string;

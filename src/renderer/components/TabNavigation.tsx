@@ -16,10 +16,11 @@ export function TabNavigation({
   onAppChange, 
   onViewChange 
 }: TabNavigationProps) {
-  // Only show subagent monitor for Claude Code
+  // Only show subagent monitor and features for Claude Code
   const views: { id: ViewType; label: string; description: string }[] = selectedApp === 'code' ? [
     { id: 'servers', label: 'MCP Servers', description: 'Configure MCP server connections' },
-    { id: 'subagents', label: 'Subagent Monitor', description: 'Monitor Claude Code subagent activity' }
+    { id: 'subagents', label: 'Subagent Monitor', description: 'Monitor Claude Code subagent activity' },
+    { id: 'claude-code-features', label: 'Claude Code', description: 'Additional Claude Code features and tools' }
   ] : [
     { id: 'servers', label: 'MCP Servers', description: 'Configure MCP server connections' }
   ];
