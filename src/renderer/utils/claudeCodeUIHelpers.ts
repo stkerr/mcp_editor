@@ -347,9 +347,9 @@ export function getEventDescription(node: SessionNode): string {
       return 'Session started';
 
     case ClaudeCodeEventType.UserPromptSubmit:
-      if (rawBody && rawBody.prompt) {
+      if (rawBody && rawBody.promptText) {
         // Truncate long prompts
-        const prompt = rawBody.prompt.toString();
+        const prompt = rawBody.promptText.toString();
         return prompt.length > 100 ? `${prompt.substring(0, 100)}...` : prompt;
       }
       return 'User prompt submitted';
