@@ -362,7 +362,14 @@ export function getEventDescription(node: SessionNode): string {
 
     case ClaudeCodeEventType.PostToolUse:
       if (rawBody && rawBody.toolName) {
-        const status = rawBody.success ? 'completed' : 'failed';
+        // Check for error indicators in the tool output
+        const toolOutput = rawBody.toolOutput || rawBody.tool_response || rawBody.tool_output;
+        const hasError = toolOutput && (
+          toolOutput.error || 
+          toolOutput.failed || 
+          (typeof toolOutput === 'string' && toolOutput.toLowerCase().includes('error'))
+        );
+        const status = hasError ? 'failed' : 'completed';
         return `${rawBody.toolName} ${status}`;
       }
       return 'Tool use completed';

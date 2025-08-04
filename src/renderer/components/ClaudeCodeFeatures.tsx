@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ChevronRight, ChevronDown, Search, RotateCcw, Expand, Minimize, Filter, X, Command, Badge } from 'lucide-react';
 import { 
   EVENT_TYPE_ICONS, 
@@ -427,6 +427,48 @@ export function ClaudeCodeFeatures() {
           });
           
           if (sessionTree) {
+            // Preserve expansion state from existing tree if it exists
+            const existingTree = sessionTrees.get(sessionId);
+            if (existingTree) {
+              // Create a map of all existing node states
+              const existingStates = new Map<string, { expanded: boolean; selected: boolean; highlighted: boolean }>();
+              existingTree.allNodes.forEach((node, id) => {
+                existingStates.set(id, {
+                  expanded: node.uiState.expanded,
+                  selected: node.uiState.selected,
+                  highlighted: node.uiState.highlighted
+                });
+              });
+              
+              // Apply preserved states to the new tree
+              const applyPreservedState = (newNode: UISessionNode) => {
+                const existingState = existingStates.get(newNode.id);
+                if (existingState) {
+                  // This is an existing node - preserve its state
+                  newNode.uiState.expanded = existingState.expanded;
+                  newNode.uiState.selected = existingState.selected;
+                  newNode.uiState.highlighted = existingState.highlighted;
+                } else {
+                  // This is a new node - use smart defaults
+                  // Only auto-expand if it's a UserPromptSubmit or the most recent event
+                  if (newNode.eventType === ClaudeCodeEventType.UserPromptSubmit) {
+                    newNode.uiState.expanded = true;
+                  } else {
+                    // Keep new events collapsed by default unless they're at depth 0
+                    newNode.uiState.expanded = newNode.depth === 0;
+                  }
+                }
+                // Recursively apply to children
+                newNode.children.forEach(child => applyPreservedState(child));
+              };
+              
+              applyPreservedState(sessionTree.rootNode);
+              console.log(`[REACT DEBUG] Preserved expansion state for session ${sessionId}`, {
+                existingNodes: existingStates.size,
+                newNodes: sessionTree.allNodes.size
+              });
+            }
+            
             newSessionTrees.set(sessionId, sessionTree);
             console.log(`[REACT DEBUG] Added session ${sessionId} to sessionTrees map`);
           } else {
@@ -443,15 +485,21 @@ export function ClaudeCodeFeatures() {
         setSessionTrees(newSessionTrees);
         console.log('[REACT DEBUG] setSessionTrees called with', newSessionTrees.size, 'sessions');
         
-        // Auto-select first session if none selected
+        // Auto-select first session only if none was ever selected
         if (!state.selectedSessionId && newSessionTrees.size > 0) {
           const firstSessionId = Array.from(newSessionTrees.keys())[0];
           console.log('[REACT DEBUG] Auto-selecting first session:', firstSessionId);
           setState(prev => ({ ...prev, selectedSessionId: firstSessionId }));
+        } else if (state.selectedSessionId && !newSessionTrees.has(state.selectedSessionId)) {
+          // If the selected session no longer exists, clear selection
+          console.log('[REACT DEBUG] Selected session no longer exists, clearing selection');
+          setState(prev => ({ ...prev, selectedSessionId: null }));
         } else {
-          console.log('[REACT DEBUG] Not auto-selecting session:', {
+          // Maintain current selection during refresh
+          console.log('[REACT DEBUG] Maintaining current selection:', {
             hasSelectedSession: !!state.selectedSessionId,
             currentSelected: state.selectedSessionId,
+            sessionExists: newSessionTrees.has(state.selectedSessionId || ''),
             availableSessions: newSessionTrees.size
           });
         }
@@ -480,7 +528,7 @@ export function ClaudeCodeFeatures() {
     
     let interval: NodeJS.Timeout | null = null;
     if (state.autoRefresh) {
-      interval = setInterval(fetchDAGState, 3000);
+      interval = setInterval(fetchDAGState, 1000);
     }
     
     return () => {
@@ -593,9 +641,17 @@ export function ClaudeCodeFeatures() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
   
-  // Auto-expand nodes when searching or filtering
+  // Track previous search/filter state to avoid unnecessary expansions
+  const prevSearchRef = useRef(state.searchQuery);
+  const prevFilterRef = useRef(state.selectedEventTypes);
+  
+  // Auto-expand nodes when searching or filtering changes
   useEffect(() => {
-    if (selectedSessionTree && (state.searchQuery || state.selectedEventTypes.size < Object.values(ClaudeCodeEventType).length)) {
+    const searchChanged = prevSearchRef.current !== state.searchQuery;
+    const filterChanged = prevFilterRef.current !== state.selectedEventTypes;
+    
+    if (selectedSessionTree && (searchChanged || filterChanged) && 
+        (state.searchQuery || state.selectedEventTypes.size < Object.values(ClaudeCodeEventType).length)) {
       // Clone the session trees to avoid mutating state directly
       const newSessionTrees = new Map(sessionTrees);
       const treeToUpdate = newSessionTrees.get(selectedSessionTree.sessionId);
@@ -633,6 +689,10 @@ export function ClaudeCodeFeatures() {
         setSessionTrees(newSessionTrees);
       }
     }
+    
+    // Update refs
+    prevSearchRef.current = state.searchQuery;
+    prevFilterRef.current = state.selectedEventTypes;
   }, [state.searchQuery, state.selectedEventTypes, selectedSessionTree?.sessionId]);
   
   // Enhanced filtering logic that maintains tree structure
@@ -742,7 +802,7 @@ export function ClaudeCodeFeatures() {
               onChange={(e) => setState(prev => ({ ...prev, autoRefresh: e.target.checked }))}
               className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
             />
-            <span className="text-gray-700 dark:text-gray-300">Auto-refresh (3s)</span>
+            <span className="text-gray-700 dark:text-gray-300">Auto-refresh (1s)</span>
           </label>
           
           <button
