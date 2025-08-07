@@ -9,6 +9,7 @@ import {
   getStatusBadgeColors, 
   getEventDescription, 
   formatDuration,
+  formatDateTime,
   SessionTree,
   UISessionNode,
   SessionStatus
@@ -75,7 +76,7 @@ function EventTreeNodeComponent({
   const hasChildren = node.hasChildren;
   const isExpanded = node.uiState.expanded;
   const eventTime = node.timeReceived;
-  const timeDisplay = eventTime.toLocaleTimeString();
+  const timeDisplay = formatDateTime(eventTime);
   const description = getEventDescription(node);
   
   // Get icon and colors from utilities
@@ -246,7 +247,7 @@ function SessionCard({
   selectedEventTypes?: Set<ClaudeCodeEventType>;
 }) {
   const { sessionId, status, startTime, endTime, duration, totalEvents } = sessionTree;
-  const timeDisplay = startTime.toLocaleTimeString();
+  const timeDisplay = formatDateTime(startTime, false); // Don't include seconds for session list
   const statusColors = getStatusBadgeColors(status);
   
   // Get all nodes and calculate filtered count
@@ -325,7 +326,7 @@ function SessionCard({
             {mostRecentEvent.eventType}
           </span>
           <span className="text-gray-400 text-xs ml-auto">
-            {mostRecentEvent.timeReceived.toLocaleTimeString()}
+            {formatDateTime(mostRecentEvent.timeReceived)}
           </span>
         </div>
       )}

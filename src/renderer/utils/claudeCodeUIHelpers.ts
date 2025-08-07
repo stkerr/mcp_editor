@@ -313,6 +313,44 @@ export function formatDuration(durationMs: number): string {
 }
 
 /**
+ * Format date and time for display
+ * @param date - Date to format
+ * @param includeSeconds - Whether to include seconds in time display
+ * @returns Formatted date and time string
+ */
+export function formatDateTime(date: Date, includeSeconds: boolean = true): string {
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  
+  // Format time
+  const timeOptions: Intl.DateTimeFormatOptions = {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(includeSeconds && { second: '2-digit' })
+  };
+  const timeStr = date.toLocaleTimeString(undefined, timeOptions);
+  
+  // Format date based on how recent it is
+  if (isToday) {
+    return `Today ${timeStr}`;
+  } else if (isYesterday) {
+    return `Yesterday ${timeStr}`;
+  } else {
+    // For older dates, show the full date
+    const dateOptions: Intl.DateTimeFormatOptions = {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    };
+    const dateStr = date.toLocaleDateString(undefined, dateOptions);
+    return `${dateStr} ${timeStr}`;
+  }
+}
+
+/**
  * Get status badge color classes
  * @param status - Session status
  * @returns Tailwind CSS classes for status badge
