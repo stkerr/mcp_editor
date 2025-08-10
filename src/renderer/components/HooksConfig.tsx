@@ -29,7 +29,7 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
       // Provide a generic example path
       const platform = navigator.platform.toLowerCase();
       if (platform.includes('win')) {
-        return 'path\\to\\mcp_editor\\webhook-relay.sh';
+        return 'path\\to\\mcp_editor\\webhook-relay.bat';
       } else {
         return './webhook-relay.sh';
       }
@@ -49,32 +49,36 @@ export function HooksConfig({ onConfigGenerated }: HooksConfigProps) {
     const portNum = parseInt(webhookPort) || 3001;
     const executablePath = appPath || getDefaultAppPath();
     
-    // Determine the webhook relay script path
+    // Determine the webhook relay script path and extension based on platform
     let relayScriptPath: string;
+    const platform = window.platformAPI?.platform || navigator.platform.toLowerCase();
+    const isWindows = platform === 'win32' || platform.includes('win');
+    const scriptExtension = isWindows ? '.bat' : '.sh';
+    
     if (isDevelopment) {
       // In development, use the script from the project root
       // In development, use relative path or current working directory
-      relayScriptPath = window.platformAPI?.cwd ? `${window.platformAPI.cwd}/resources/webhook-relay.sh` : './resources/webhook-relay.sh';
+      const basePath = window.platformAPI?.cwd ? `${window.platformAPI.cwd}/resources/webhook-relay` : './resources/webhook-relay';
+      relayScriptPath = `${basePath}${scriptExtension}`;
     } else {
       // In production, the script is bundled in the app's Resources folder
       // With extraResources, it's directly in the Resources folder
-      const platform = window.platformAPI?.platform || navigator.platform.toLowerCase();
       if (platform === 'darwin' || platform.includes('mac')) {
         // macOS: /Applications/MCP Editor.app/Contents/Resources/webhook-relay.sh
         const pathParts = executablePath.split('/');
         const appIndex = pathParts.findIndex(part => part.endsWith('.app'));
         if (appIndex !== -1) {
           const appPath = pathParts.slice(0, appIndex + 1).join('/');
-          relayScriptPath = `${appPath}/Contents/Resources/webhook-relay.sh`;
+          relayScriptPath = `${appPath}/Contents/Resources/webhook-relay${scriptExtension}`;
         } else {
-          relayScriptPath = executablePath.replace(/\/MacOS\/[^\/]+$/, '/Resources/webhook-relay.sh');
+          relayScriptPath = executablePath.replace(/\/MacOS\/[^\/]+$/, `/Resources/webhook-relay${scriptExtension}`);
         }
-      } else if (platform === 'win32' || platform.includes('win')) {
+      } else if (isWindows) {
         // Windows: resources folder is next to the exe
-        relayScriptPath = executablePath.replace(/[^\\]+\.exe$/, 'resources\\webhook-relay.sh');
+        relayScriptPath = executablePath.replace(/[^\\]+\.exe$/, `resources\\webhook-relay${scriptExtension}`);
       } else {
         // Linux: resources folder is next to the executable
-        relayScriptPath = executablePath.replace(/[^\/]+$/, 'resources/webhook-relay.sh');
+        relayScriptPath = executablePath.replace(/[^\/]+$/, `resources/webhook-relay${scriptExtension}`);
       }
     }
     

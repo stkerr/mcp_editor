@@ -76,6 +76,10 @@
       {
         "from": "resources/webhook-relay.sh",
         "to": "webhook-relay.sh"
+      },
+      {
+        "from": "resources/webhook-relay.bat",
+        "to": "webhook-relay.bat"
       }
     ],
     "mac": {
