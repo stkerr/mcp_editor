@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { existsSync } from 'fs';
 import { IPC_CHANNELS } from '../shared/constants';
 import { ClaudeUsageData } from '../shared/types';
 
@@ -9,9 +10,29 @@ const execAsync = promisify(exec);
 /**
  * Check if ccusage command is available
  */
-async function checkCcusageCommand(): Promise<{ available: boolean; method: 'direct' | 'npx' | null }> {
+async function checkCcusageCommand(): Promise<{ available: boolean; method: 'direct' | 'npx' | null; path?: string }> {
+  // Check common installation paths for ccusage
+  const commonPaths = [
+    '/opt/homebrew/bin/ccusage',  // Apple Silicon Homebrew
+    '/usr/local/bin/ccusage',      // Intel Homebrew
+    '/usr/bin/ccusage',             // System
+    '/usr/local/opt/ccusage/bin/ccusage'  // Alternative Homebrew location
+  ];
+  
+  // First check if ccusage exists at known paths
+  for (const path of commonPaths) {
+    if (existsSync(path)) {
+      try {
+        await execAsync(`${path} --version`);
+        return { available: true, method: 'direct', path };
+      } catch {
+        // File exists but might not be executable
+      }
+    }
+  }
+  
   try {
-    // First try direct ccusage command
+    // Try direct ccusage command (PATH should be fixed by fix-path)
     await execAsync('ccusage --version');
     return { available: true, method: 'direct' };
   } catch {
@@ -205,8 +226,15 @@ function parseCcusageOutput(output: string): ClaudeUsageData {
 /**
  * Execute ccusage command and get usage data
  */
-async function getCcusageData(method: 'direct' | 'npx'): Promise<ClaudeUsageData> {
-  const command = method === 'direct' ? 'ccusage -j' : 'npx ccusage@latest -j';
+async function getCcusageData(method: 'direct' | 'npx', path?: string): Promise<ClaudeUsageData> {
+  let command: string;
+  
+  if (path) {
+    // Use the full path if available
+    command = `${path} -j`;
+  } else {
+    command = method === 'direct' ? 'ccusage -j' : 'npx ccusage@latest -j';
+  }
   
   try {
     const { stdout, stderr } = await execAsync(command, {
@@ -250,7 +278,7 @@ export function setupUsageHandlers() {
   ipcMain.handle(IPC_CHANNELS.GET_USAGE_DATA, async (_, options?: { raw?: boolean }) => {
     try {
       // First check which method is available
-      const { available, method } = await checkCcusageCommand();
+      const { available, method, path } = await checkCcusageCommand();
       
       if (!available || !method) {
         return {
@@ -261,7 +289,12 @@ export function setupUsageHandlers() {
 
       if (options?.raw) {
         // Return raw output for debugging
-        const command = method === 'direct' ? 'ccusage -j' : 'npx ccusage@latest -j';
+        let command: string;
+        if (path) {
+          command = `${path} -j`;
+        } else {
+          command = method === 'direct' ? 'ccusage -j' : 'npx ccusage@latest -j';
+        }
         const { stdout } = await execAsync(command, {
           timeout: 60000,
           encoding: 'utf8'
@@ -269,7 +302,7 @@ export function setupUsageHandlers() {
         return { success: true, rawOutput: stdout };
       }
 
-      const data = await getCcusageData(method);
+      const data = await getCcusageData(method, path);
       return { success: true, data };
     } catch (error) {
       return {

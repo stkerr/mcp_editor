@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
+import fixPath from 'fix-path';
 import { setupConfigHandlers } from './config-manager';
 import { WebhookServer } from './webhook-server';
 import { setupUsageHandlers } from './usage-handlers';
@@ -14,6 +15,11 @@ import {
 import { promptHierarchyManager } from './file-operations';
 import { IPC_CHANNELS } from '../shared/constants';
 import { ClaudeCodeHooks } from '../shared/types';
+
+// Fix PATH for macOS to include Homebrew paths
+if (process.platform === 'darwin') {
+  fixPath();
+}
 
 let mainWindow: BrowserWindow | null = null;
 let webhookServer: WebhookServer | null = null;
