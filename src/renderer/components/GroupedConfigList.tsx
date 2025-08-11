@@ -168,16 +168,13 @@ export function GroupedConfigList({ groupedConfig, onConfigChange }: GroupedConf
               (Available in all projects)
             </span>
           </div>
-          {/* Disabled for Claude Code - writing global config not supported yet */}
-          {false && (
-            <button
-              onClick={handleAddGlobalServer}
-              className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              Add Global
-            </button>
-          )}
+          <button
+            onClick={handleAddGlobalServer}
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Add Global
+          </button>
         </div>
 
         {globalServerEntries.length === 0 && !isAdding && (
