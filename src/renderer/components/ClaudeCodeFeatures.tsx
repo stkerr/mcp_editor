@@ -389,10 +389,14 @@ export function ClaudeCodeFeatures() {
     return `${data.sessionCount}|${sessionVersions.join('|')}`;
   }, []);
   
-  const fetchDAGState = useCallback(async () => {
+  const fetchDAGState = useCallback(async (isAutoRefresh = false) => {
     const startTime = performance.now();
-    console.log('\n[REACT DEBUG] fetchDAGState() called at', new Date().toISOString());
-    setLoading(true);
+    console.log('\n[REACT DEBUG] fetchDAGState() called at', new Date().toISOString(), { isAutoRefresh });
+    
+    // Only set loading state for manual refreshes to avoid flicker during auto-refresh
+    if (!isAutoRefresh) {
+      setLoading(true);
+    }
     setError(null);
     try {
       console.log('[REACT DEBUG] Calling window.configAPI.getDAGState()');
@@ -431,7 +435,10 @@ export function ClaudeCodeFeatures() {
         
         if (!dataChanged) {
           console.log('[REACT DEBUG] Data unchanged, skipping update');
-          setLoading(false); // Make sure to set loading to false
+          // Only reset loading state if it was set (i.e., manual refresh)
+          if (!isAutoRefresh) {
+            setLoading(false);
+          }
           return; // Early return if no data changes
         }
         
@@ -612,18 +619,24 @@ export function ClaudeCodeFeatures() {
     } finally {
       const endTime = performance.now();
       const duration = endTime - startTime;
-      console.log('[REACT DEBUG] fetchDAGState complete, setting loading to false');
+      console.log('[REACT DEBUG] fetchDAGState complete');
       console.log(`[REACT DEBUG] Total fetchDAGState duration: ${duration.toFixed(2)}ms`);
-      setLoading(false);
+      // Only reset loading state if it was set (i.e., manual refresh)
+      if (!isAutoRefresh) {
+        console.log('[REACT DEBUG] Setting loading to false');
+        setLoading(false);
+      }
     }
   }, [createDataVersion, saveScrollPosition, restoreScrollPosition, sessionTrees, state.selectedSessionId]);
   
   useEffect(() => {
-    fetchDAGState();
+    // Initial load - show loading state
+    fetchDAGState(false);
     
     let interval: NodeJS.Timeout | null = null;
     if (state.autoRefresh) {
-      interval = setInterval(fetchDAGState, 1000);
+      // Auto-refresh calls - don't show loading state to prevent flicker
+      interval = setInterval(() => fetchDAGState(true), 1000);
     }
     
     return () => {
@@ -930,7 +943,7 @@ export function ClaudeCodeFeatures() {
           </label>
           
           <button
-            onClick={fetchDAGState}
+            onClick={() => fetchDAGState(false)}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
