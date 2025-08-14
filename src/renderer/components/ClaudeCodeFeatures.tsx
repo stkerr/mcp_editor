@@ -349,7 +349,47 @@ export function ClaudeCodeFeatures() {
     showFilterDropdown: false,
   });
   
-  const fetchDAGState = async () => {
+  // Refs for preserving user interactions and scroll position
+  const userSelectedSessionRef = useRef<string | null>(null);
+  const userExpandedNodesRef = useRef<Set<string>>(new Set());
+  const userCollapsedNodesRef = useRef<Set<string>>(new Set());
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lastScrollPosition = useRef<number>(0);
+  const preserveScrollRef = useRef<boolean>(false);
+  const lastDataVersionRef = useRef<string>('');
+  
+  // Helper functions for scroll position and data management
+  const saveScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current) {
+      lastScrollPosition.current = scrollContainerRef.current.scrollTop;
+      preserveScrollRef.current = true;
+    }
+  }, []);
+  
+  const restoreScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current && preserveScrollRef.current) {
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = lastScrollPosition.current;
+          preserveScrollRef.current = false;
+        }
+      });
+    }
+  }, []);
+  
+  const createDataVersion = useCallback((data: DAGStateResponse['data']) => {
+    if (!data) return '';
+    const sessionKeys = Object.keys(data.sessions).sort();
+    const sessionVersions = sessionKeys.map(key => {
+      const session = data.sessions[key];
+      const nodeCount = session.nodes?.length || 0;
+      const lastNodeTime = session.nodes?.[session.nodes.length - 1]?.timeReceived || '';
+      return `${key}:${nodeCount}:${lastNodeTime}`;
+    });
+    return `${data.sessionCount}|${sessionVersions.join('|')}`;
+  }, []);
+  
+  const fetchDAGState = useCallback(async () => {
     const startTime = performance.now();
     console.log('\n[REACT DEBUG] fetchDAGState() called at', new Date().toISOString());
     setLoading(true);
@@ -379,15 +419,42 @@ export function ClaudeCodeFeatures() {
           }
         });
         
-        setDagState(result.data);
+        // Check if data has actually changed
+        const newDataVersion = createDataVersion(result.data);
+        const dataChanged = newDataVersion !== lastDataVersionRef.current;
         
-        // Build session trees from the raw data
+        console.log('[REACT DEBUG] Data change check:', {
+          dataChanged,
+          oldVersion: lastDataVersionRef.current.substring(0, 50) + '...',
+          newVersion: newDataVersion.substring(0, 50) + '...'
+        });
+        
+        if (!dataChanged) {
+          console.log('[REACT DEBUG] Data unchanged, skipping update');
+          setLoading(false); // Make sure to set loading to false
+          return; // Early return if no data changes
+        }
+        
+        // Save scroll position before major state changes
+        saveScrollPosition();
+        
+        setDagState(result.data);
+        lastDataVersionRef.current = newDataVersion;
+        
+        // Build session trees from the raw data with proper ordering
         const newSessionTrees = new Map<string, SessionTree>();
         
         console.log('[REACT DEBUG] Building session trees...');
         let processedSessions = 0;
         
-        for (const [sessionId, sessionData] of Object.entries(result.data.sessions)) {
+        // Sort sessions by startTime (most recent first) to ensure consistent ordering
+        const sortedSessions = Object.entries(result.data.sessions).sort(([, a], [, b]) => {
+          const aStartTime = a.nodes?.[0]?.timeReceived ? new Date(a.nodes[0].timeReceived).getTime() : 0;
+          const bStartTime = b.nodes?.[0]?.timeReceived ? new Date(b.nodes[0].timeReceived).getTime() : 0;
+          return bStartTime - aStartTime; // Most recent first
+        });
+        
+        for (const [sessionId, sessionData] of sortedSessions) {
           console.log(`[REACT DEBUG] Processing session ${++processedSessions}: ${sessionId}`, {
             nodeCount: sessionData.nodeCount,
             actualNodesLength: sessionData.nodes?.length,
@@ -441,22 +508,38 @@ export function ClaudeCodeFeatures() {
                 });
               });
               
-              // Apply preserved states to the new tree
+              // Apply preserved states to the new tree with user interaction respect
               const applyPreservedState = (newNode: UISessionNode) => {
                 const existingState = existingStates.get(newNode.id);
+                const isUserCollapsed = userCollapsedNodesRef.current.has(newNode.id);
+                const isUserExpanded = userExpandedNodesRef.current.has(newNode.id);
+                
                 if (existingState) {
                   // This is an existing node - preserve its state
-                  newNode.uiState.expanded = existingState.expanded;
+                  // But respect user interactions over automatic behavior
+                  if (isUserCollapsed) {
+                    newNode.uiState.expanded = false;
+                  } else if (isUserExpanded) {
+                    newNode.uiState.expanded = true;
+                  } else {
+                    newNode.uiState.expanded = existingState.expanded;
+                  }
                   newNode.uiState.selected = existingState.selected;
                   newNode.uiState.highlighted = existingState.highlighted;
                 } else {
-                  // This is a new node - use smart defaults
-                  // Only auto-expand if it's a UserPromptSubmit or the most recent event
-                  if (newNode.eventType === ClaudeCodeEventType.UserPromptSubmit) {
+                  // This is a new node - use smart defaults but respect user preferences
+                  if (isUserCollapsed) {
+                    newNode.uiState.expanded = false;
+                  } else if (isUserExpanded) {
                     newNode.uiState.expanded = true;
                   } else {
-                    // Keep new events collapsed by default unless they're at depth 0
-                    newNode.uiState.expanded = newNode.depth === 0;
+                    // Only auto-expand UserPromptSubmit events that user hasn't interacted with
+                    if (newNode.eventType === ClaudeCodeEventType.UserPromptSubmit) {
+                      newNode.uiState.expanded = true;
+                    } else {
+                      // Keep new events collapsed by default unless they're at depth 0
+                      newNode.uiState.expanded = newNode.depth === 0;
+                    }
                   }
                 }
                 // Recursively apply to children
@@ -486,24 +569,35 @@ export function ClaudeCodeFeatures() {
         setSessionTrees(newSessionTrees);
         console.log('[REACT DEBUG] setSessionTrees called with', newSessionTrees.size, 'sessions');
         
-        // Auto-select first session only if none was ever selected
-        if (!state.selectedSessionId && newSessionTrees.size > 0) {
-          const firstSessionId = Array.from(newSessionTrees.keys())[0];
-          console.log('[REACT DEBUG] Auto-selecting first session:', firstSessionId);
-          setState(prev => ({ ...prev, selectedSessionId: firstSessionId }));
+        // Handle session selection with proper user preference respect
+        const sortedSessionIds = Array.from(newSessionTrees.keys()); // Already sorted by time
+        
+        if (userSelectedSessionRef.current && newSessionTrees.has(userSelectedSessionRef.current)) {
+          // User has explicitly selected a session and it still exists - maintain it
+          console.log('[REACT DEBUG] Maintaining user-selected session:', userSelectedSessionRef.current);
+          if (state.selectedSessionId !== userSelectedSessionRef.current) {
+            setState(prev => ({ ...prev, selectedSessionId: userSelectedSessionRef.current }));
+          }
+        } else if (!state.selectedSessionId && sortedSessionIds.length > 0) {
+          // No session selected yet - auto-select the most recent one
+          const mostRecentSessionId = sortedSessionIds[0];
+          console.log('[REACT DEBUG] Auto-selecting most recent session:', mostRecentSessionId);
+          setState(prev => ({ ...prev, selectedSessionId: mostRecentSessionId }));
         } else if (state.selectedSessionId && !newSessionTrees.has(state.selectedSessionId)) {
-          // If the selected session no longer exists, clear selection
-          console.log('[REACT DEBUG] Selected session no longer exists, clearing selection');
-          setState(prev => ({ ...prev, selectedSessionId: null }));
-        } else {
-          // Maintain current selection during refresh
-          console.log('[REACT DEBUG] Maintaining current selection:', {
-            hasSelectedSession: !!state.selectedSessionId,
-            currentSelected: state.selectedSessionId,
-            sessionExists: newSessionTrees.has(state.selectedSessionId || ''),
-            availableSessions: newSessionTrees.size
-          });
+          // Selected session no longer exists - try to select most recent, or clear
+          console.log('[REACT DEBUG] Selected session no longer exists, selecting most recent or clearing');
+          if (sortedSessionIds.length > 0) {
+            const mostRecentSessionId = sortedSessionIds[0];
+            setState(prev => ({ ...prev, selectedSessionId: mostRecentSessionId }));
+            userSelectedSessionRef.current = null; // Reset user selection since it's gone
+          } else {
+            setState(prev => ({ ...prev, selectedSessionId: null }));
+            userSelectedSessionRef.current = null;
+          }
         }
+        
+        // Restore scroll position after state changes
+        setTimeout(restoreScrollPosition, 0);
       } else {
         console.log('[REACT DEBUG] Result was not successful or had no data');
         const errorMsg = result.error || 'Failed to fetch DAG state';
@@ -522,7 +616,7 @@ export function ClaudeCodeFeatures() {
       console.log(`[REACT DEBUG] Total fetchDAGState duration: ${duration.toFixed(2)}ms`);
       setLoading(false);
     }
-  };
+  }, [createDataVersion, saveScrollPosition, restoreScrollPosition, sessionTrees, state.selectedSessionId]);
   
   useEffect(() => {
     fetchDAGState();
@@ -535,11 +629,27 @@ export function ClaudeCodeFeatures() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [state.autoRefresh]);
+  }, [state.autoRefresh, fetchDAGState]);
   
   const handleToggleExpand = (nodeId: string) => {
     const selectedTree = state.selectedSessionId ? sessionTrees.get(state.selectedSessionId) : null;
     if (selectedTree) {
+      const node = selectedTree.allNodes.get(nodeId);
+      if (node) {
+        // Track user interaction
+        if (node.uiState.expanded) {
+          // User is collapsing this node
+          userCollapsedNodesRef.current.add(nodeId);
+          userExpandedNodesRef.current.delete(nodeId);
+          console.log('[REACT DEBUG] User collapsed node:', nodeId);
+        } else {
+          // User is expanding this node
+          userExpandedNodesRef.current.add(nodeId);
+          userCollapsedNodesRef.current.delete(nodeId);
+          console.log('[REACT DEBUG] User expanded node:', nodeId);
+        }
+      }
+      
       toggleNodeExpansion(selectedTree, nodeId);
       // Force re-render by updating the map
       setSessionTrees(new Map(sessionTrees));
@@ -565,9 +675,12 @@ export function ClaudeCodeFeatures() {
   const handleExpandAll = () => {
     const selectedTree = state.selectedSessionId ? sessionTrees.get(state.selectedSessionId) : null;
     if (selectedTree) {
-      // Expand all nodes
-      selectedTree.allNodes.forEach(node => {
+      console.log('[REACT DEBUG] User expand all nodes');
+      // Track that user expanded all nodes
+      selectedTree.allNodes.forEach((node, nodeId) => {
         node.uiState.expanded = true;
+        userExpandedNodesRef.current.add(nodeId);
+        userCollapsedNodesRef.current.delete(nodeId);
       });
       setSessionTrees(new Map(sessionTrees));
     }
@@ -576,9 +689,19 @@ export function ClaudeCodeFeatures() {
   const handleCollapseAll = () => {
     const selectedTree = state.selectedSessionId ? sessionTrees.get(state.selectedSessionId) : null;
     if (selectedTree) {
-      // Collapse all nodes except root
+      console.log('[REACT DEBUG] User collapse all nodes');
+      // Track that user collapsed all nodes (except root)
       selectedTree.allNodes.forEach((node, nodeId) => {
-        node.uiState.expanded = nodeId === selectedTree.rootNode.id;
+        const shouldBeExpanded = nodeId === selectedTree.rootNode.id;
+        node.uiState.expanded = shouldBeExpanded;
+        
+        if (shouldBeExpanded) {
+          userExpandedNodesRef.current.add(nodeId);
+          userCollapsedNodesRef.current.delete(nodeId);
+        } else {
+          userCollapsedNodesRef.current.add(nodeId);
+          userExpandedNodesRef.current.delete(nodeId);
+        }
       });
       setSessionTrees(new Map(sessionTrees));
     }
@@ -844,7 +967,11 @@ export function ClaudeCodeFeatures() {
                 key={sessionTree.sessionId}
                 sessionTree={sessionTree}
                 isSelected={state.selectedSessionId === sessionTree.sessionId}
-                onSelect={() => setState(prev => ({ ...prev, selectedSessionId: sessionTree.sessionId }))}
+                onSelect={() => {
+                  console.log('[REACT DEBUG] User selected session:', sessionTree.sessionId);
+                  userSelectedSessionRef.current = sessionTree.sessionId;
+                  setState(prev => ({ ...prev, selectedSessionId: sessionTree.sessionId }));
+                }}
                 searchQuery={state.searchQuery}
                 selectedEventTypes={state.selectedEventTypes}
               />
@@ -997,7 +1124,7 @@ export function ClaudeCodeFeatures() {
               </div>
               
               {/* Event Tree */}
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-4" ref={scrollContainerRef}>
                 {filteredRootNode ? (
                   <div className="space-y-1">
                     <EventTreeNodeComponent

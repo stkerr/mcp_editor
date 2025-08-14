@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { SubagentInfo } from '../../shared/types';
 import { Activity, Clock, CheckCircle, XCircle, Zap, Settings, Trash2, ChevronRight, ChevronDown, MessageSquare, FileText } from 'lucide-react';
 import { HooksConfig } from './HooksConfig';
@@ -23,6 +23,165 @@ interface SubagentMonitorProps {
   selectedApp?: 'desktop' | 'code';
 }
 
+// Memoized components for performance optimization
+const MemoizedTaskGroup = memo(({ 
+  taskGroup, 
+  promptId, 
+  expandedNodes, 
+  onToggleExpansion, 
+  onSelectSubagent 
+}: {
+  taskGroup: any;
+  promptId: string;
+  expandedNodes: Set<string>;
+  onToggleExpansion: (taskKey: string) => void;
+  onSelectSubagent: (subagent: SubagentInfo) => void;
+}) => {
+  const taskKey = `${promptId}-task-${taskGroup.description}`;
+  const hasMultipleEvents = taskGroup.events.length > 1;
+  
+  return (
+    <div className="ml-8 space-y-1">
+      {/* Task Group Header */}
+      <div 
+        className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+        onClick={() => {
+          if (hasMultipleEvents) {
+            onToggleExpansion(taskKey);
+          } else {
+            // If single event, show details directly
+            onSelectSubagent(taskGroup.events[0]);
+          }
+        }}
+      >
+        {/* Expand/Collapse Icon (only if multiple events) */}
+        {hasMultipleEvents && (
+          <div className="flex-shrink-0">
+            {expandedNodes.has(taskKey) ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+          </div>
+        )}
+
+        {/* Status Icon */}
+        <div className="flex-shrink-0">
+          {(() => {
+            switch (taskGroup.status) {
+              case 'active':
+                return <Activity className="w-4 h-4 text-green-500 animate-pulse" />;
+              case 'completed':
+                return <CheckCircle className="w-4 h-4 text-blue-500" />;
+              case 'failed':
+                return <XCircle className="w-4 h-4 text-red-500" />;
+              case 'interrupted':
+                return <XCircle className="w-4 h-4 text-orange-500" />;
+              default:
+                return <Clock className="w-4 h-4 text-gray-500" />;
+            }
+          })()}
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h4 className="font-medium text-sm truncate">
+              {taskGroup.description}
+            </h4>
+            {taskGroup.status && (
+              <span className={`text-xs px-2 py-0.5 rounded-full`}>
+                {taskGroup.status}
+              </span>
+            )}
+            {hasMultipleEvents && (
+              <span className="text-xs text-muted-foreground">
+                ({taskGroup.events.length} events)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {new Intl.DateTimeFormat('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              }).format(new Date(taskGroup.startTime))}
+            </span>
+            {taskGroup.endTime && (
+              <span className="font-mono">
+                {(() => {
+                  const duration = new Date(taskGroup.endTime).getTime() - new Date(taskGroup.startTime).getTime();
+                  const seconds = Math.floor(duration / 1000);
+                  const minutes = Math.floor(seconds / 60);
+                  const hours = Math.floor(minutes / 60);
+                  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+                  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+                  return `${seconds}s`;
+                })()}
+              </span>
+            )}
+            {taskGroup.totalTokens && (
+              <span>
+                {taskGroup.totalTokens} tokens
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Action Indicator */}
+        <div className="flex-shrink-0">
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        </div>
+      </div>
+
+      {/* Individual Events (when expanded) */}
+      {hasMultipleEvents && expandedNodes.has(taskKey) && (
+        <div className="ml-8 space-y-2">
+          {taskGroup.events.map((event: SubagentInfo) => (
+            <div 
+              key={event.id}
+              className="flex items-center gap-3 p-2 border rounded-lg hover:bg-muted/30 cursor-pointer transition-colors text-sm"
+              onClick={() => onSelectSubagent(event)}
+            >
+              <div className="flex-shrink-0">
+                {(() => {
+                  switch (event.status) {
+                    case 'active':
+                      return <Activity className="w-4 h-4 text-green-500 animate-pulse" />;
+                    case 'completed':
+                      return <CheckCircle className="w-4 h-4 text-blue-500" />;
+                    case 'failed':
+                      return <XCircle className="w-4 h-4 text-red-500" />;
+                    default:
+                      return <Clock className="w-4 h-4 text-gray-500" />;
+                  }
+                })()}
+              </div>
+              <div className="flex-1">
+                <span className="text-muted-foreground">
+                  {event.status === 'active' ? 'Started' : event.status === 'completed' ? 'Completed' : 'Event'} at {new Intl.DateTimeFormat('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  }).format(new Date(event.startTime))}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+MemoizedTaskGroup.displayName = 'MemoizedTaskGroup';
+
 export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }: SubagentMonitorProps) {
   const [subagents, setSubagents] = useState<SubagentInfo[]>([]);
   const [prompts, setPrompts] = useState<PromptInfo[]>([]);
@@ -31,8 +190,76 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
   const [showSetup, setShowSetup] = useState(false);
   const [selectedSubagent, setSelectedSubagent] = useState<SubagentInfo | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  
+  // Refs for scroll position preservation
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lastScrollPosition = useRef<number>(0);
+  const preserveScrollRef = useRef<boolean>(false);
+  
+  // Track data versions to avoid unnecessary updates
+  const lastDataVersionRef = useRef<string>('');
+  const isInitialLoadRef = useRef<boolean>(true);
+  
+  // Keep track of user-initiated expansions vs auto-expansions
+  const userExpandedNodesRef = useRef<Set<string>>(new Set());
+  const autoExpandedNodesRef = useRef<Set<string>>(new Set());
 
   console.log('SubagentMonitor render:', { selectedApp, loading, error, subagents: subagents.length });
+
+  // Save scroll position before updates
+  const saveScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current) {
+      lastScrollPosition.current = scrollContainerRef.current.scrollTop;
+      preserveScrollRef.current = true;
+    }
+  }, []);
+  
+  // Restore scroll position after updates
+  const restoreScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current && preserveScrollRef.current) {
+      // Use requestAnimationFrame to ensure the DOM has been updated
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = lastScrollPosition.current;
+          preserveScrollRef.current = false;
+        }
+      });
+    }
+  }, []);
+  
+  // Smart data comparison to avoid unnecessary updates
+  const createDataVersion = useCallback((subagents: SubagentInfo[], prompts: PromptInfo[]) => {
+    const subagentVersion = subagents.map(s => `${s.id}-${s.status}-${s.lastActivity}`).join('|');
+    const promptVersion = prompts.map(p => `${p.promptId}-${p.status}-${p.startTime}`).join('|');
+    return `${subagentVersion}:${promptVersion}`;
+  }, []);
+  
+  const updateDataIfChanged = useCallback((newSubagents: SubagentInfo[], newPrompts: PromptInfo[]) => {
+    const newVersion = createDataVersion(newSubagents, newPrompts);
+    
+    if (newVersion !== lastDataVersionRef.current) {
+      console.log('Data changed, updating state');
+      
+      // Save scroll position before state update (except on initial load)
+      if (!isInitialLoadRef.current) {
+        saveScrollPosition();
+      }
+      
+      setSubagents(newSubagents);
+      setPrompts(newPrompts);
+      lastDataVersionRef.current = newVersion;
+      
+      // Restore scroll position after state update
+      if (!isInitialLoadRef.current) {
+        // Schedule restoration for next frame
+        setTimeout(restoreScrollPosition, 0);
+      }
+    } else {
+      console.log('Data unchanged, skipping update');
+    }
+    
+    isInitialLoadRef.current = false;
+  }, [createDataVersion, saveScrollPosition, restoreScrollPosition]);
 
   useEffect(() => {
     loadSubagents();
@@ -45,11 +272,22 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
     if (window.configAPI?.onSubagentUpdate) {
       unsubscribeSubagent = window.configAPI.onSubagentUpdate((newSubagent: SubagentInfo) => {
         setSubagents(prev => {
+          // Save scroll position before real-time update
+          saveScrollPosition();
+          
           // Remove any existing entry with the same ID and add the new one
           const filtered = prev.filter(s => s.id !== newSubagent.id);
-          return [...filtered, newSubagent].sort((a, b) => 
+          const updated = [...filtered, newSubagent].sort((a, b) => 
             new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
           );
+          
+          // Update data version
+          lastDataVersionRef.current = createDataVersion(updated, prompts);
+          
+          // Restore scroll position after update
+          setTimeout(restoreScrollPosition, 0);
+          
+          return updated;
         });
       });
     }
@@ -68,34 +306,56 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
           };
           
           setPrompts(prev => {
+            // Save scroll position before real-time update
+            saveScrollPosition();
+            
             // Check if there's an existing active prompt for this session
             const existingPromptIndex = prev.findIndex(p => 
               p.sessionId === data.sessionId && p.status === 'active'
             );
             
+            let updated;
             if (existingPromptIndex !== -1) {
               // Mark the existing prompt as interrupted
-              const updated = [...prev];
+              updated = [...prev];
               updated[existingPromptIndex] = {
                 ...updated[existingPromptIndex],
                 status: 'interrupted'
               };
-              return [...updated, newPrompt];
+              updated = [...updated, newPrompt];
+            } else {
+              updated = [...prev, newPrompt];
             }
             
-            return [...prev, newPrompt];
+            // Update data version
+            lastDataVersionRef.current = createDataVersion(subagents, updated);
+            
+            // Restore scroll position after update
+            setTimeout(restoreScrollPosition, 0);
+            
+            return updated;
           });
         } else if (data.type === 'completed') {
           // Update prompt status to completed
           setPrompts(prev => {
             const promptIndex = prev.findIndex(p => p.promptId === data.promptId);
             if (promptIndex !== -1) {
+              // Save scroll position before real-time update
+              saveScrollPosition();
+              
               const updated = [...prev];
               updated[promptIndex] = {
                 ...updated[promptIndex],
                 status: 'completed',
                 duration: new Date(data.timestamp).getTime() - new Date(updated[promptIndex].startTime).getTime()
               };
+              
+              // Update data version
+              lastDataVersionRef.current = createDataVersion(subagents, updated);
+              
+              // Restore scroll position after update
+              setTimeout(restoreScrollPosition, 0);
+              
               return updated;
             }
             return prev;
@@ -128,23 +388,27 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
         const result = await window.configAPI.getSubagents();
         console.log('getSubagents result:', result);
         if (result.success) {
-          setSubagents(result.data);
+          const newSubagents = result.data || [];
+          let newPrompts = prompts; // Keep existing prompts if no new data
+          
+          // Also load prompts
+          if (window.configAPI?.getPrompts) {
+            const promptResult = await window.configAPI.getPrompts();
+            console.log('getPrompts result:', promptResult);
+            if (promptResult.success) {
+              newPrompts = promptResult.data || [];
+            }
+          }
+          
+          // Use smart update that preserves scroll position
+          updateDataIfChanged(newSubagents, newPrompts);
         } else {
           setError(result.error);
         }
       } else {
         console.log('window.configAPI.getSubagents not available');
         // For now, show empty state with setup instructions
-        setSubagents([]);
-      }
-      
-      // Also load prompts
-      if (window.configAPI?.getPrompts) {
-        const promptResult = await window.configAPI.getPrompts();
-        console.log('getPrompts result:', promptResult);
-        if (promptResult.success) {
-          setPrompts(promptResult.data || []);
-        }
+        updateDataIfChanged([], []);
       }
     } catch (err) {
       console.error('Error in loadSubagents:', err);
@@ -175,6 +439,34 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
       setError('Failed to clear subagent data');
     }
   };
+
+  // Optimized callback handlers for memoized components
+  const handleToggleExpansion = useCallback((taskKey: string) => {
+    const newExpanded = new Set(expandedNodes);
+    if (newExpanded.has(taskKey)) {
+      newExpanded.delete(taskKey);
+      userExpandedNodesRef.current.delete(taskKey);
+      autoExpandedNodesRef.current.delete(taskKey);
+    } else {
+      newExpanded.add(taskKey);
+      userExpandedNodesRef.current.add(taskKey);
+      autoExpandedNodesRef.current.delete(taskKey);
+    }
+    setExpandedNodes(newExpanded);
+  }, [expandedNodes]);
+
+  const handleSelectSubagent = useCallback((subagent: SubagentInfo) => {
+    setSelectedSubagent(subagent);
+  }, []);
+
+  // Build the prompt hierarchy with memoization (must be before any conditional returns)
+  const promptHierarchy = useMemo(() => {
+    // Safe to call even when data is not ready - return empty array if no data
+    if (!subagents.length && !prompts.length) {
+      return [];
+    }
+    return buildPromptHierarchy(subagents, prompts, expandedNodes);
+  }, [subagents, prompts, expandedNodes]);
 
   const formatTime = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
@@ -277,116 +569,6 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
   }
 
 
-  // Function to render task groups (grouped by description)
-  const renderTaskGroups = (taskGroups: TaskGroupNode[], promptId: string): React.ReactNode => {
-    return taskGroups.map(({ taskGroup, expanded }) => {
-      const taskKey = `${promptId}-task-${taskGroup.description}`;
-      const hasMultipleEvents = taskGroup.events.length > 1;
-      
-      return (
-        <div key={taskKey} className="ml-8 space-y-1">
-          {/* Task Group Header */}
-          <div 
-            className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-            onClick={() => {
-              if (hasMultipleEvents) {
-                const newExpanded = new Set(expandedNodes);
-                if (newExpanded.has(taskKey)) {
-                  newExpanded.delete(taskKey);
-                } else {
-                  newExpanded.add(taskKey);
-                }
-                setExpandedNodes(newExpanded);
-              } else {
-                // If single event, show details directly
-                setSelectedSubagent(taskGroup.events[0]);
-              }
-            }}
-          >
-            {/* Expand/Collapse Icon (only if multiple events) */}
-            {hasMultipleEvents && (
-              <div className="flex-shrink-0">
-                {expandedNodes.has(taskKey) ? (
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                )}
-              </div>
-            )}
-
-            {/* Status Icon */}
-            {getStatusIcon(taskGroup.status) && (
-              <div className="flex-shrink-0">
-                {getStatusIcon(taskGroup.status)}
-              </div>
-            )}
-
-            {/* Main Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h4 className="font-medium text-sm truncate">
-                  {getTaskGroupEmoji(taskGroup.events)} {taskGroup.description}
-                </h4>
-                {taskGroup.status && (
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(taskGroup.status)}`}>
-                    {taskGroup.status}
-                  </span>
-                )}
-                {hasMultipleEvents && (
-                  <span className="text-xs text-muted-foreground">
-                    ({taskGroup.events.length} events)
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {formatTime(taskGroup.startTime)}
-                </span>
-                <span className="font-mono">
-                  {formatDuration(taskGroup.startTime, taskGroup.endTime)}
-                </span>
-                {taskGroup.totalTokens && (
-                  <span>
-                    {taskGroup.totalTokens} tokens
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Action Indicator */}
-            <div className="flex-shrink-0">
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </div>
-          </div>
-
-          {/* Individual Events (when expanded) */}
-          {hasMultipleEvents && expandedNodes.has(taskKey) && (
-            <div className="ml-8 space-y-2">
-              {taskGroup.events.map(event => (
-                <div 
-                  key={event.id}
-                  className="flex items-center gap-3 p-2 border rounded-lg hover:bg-muted/30 cursor-pointer transition-colors text-sm"
-                  onClick={() => setSelectedSubagent(event)}
-                >
-                  {getStatusIcon(event.status) && (
-                    <div className="flex-shrink-0">
-                      {getStatusIcon(event.status)}
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <span className="text-muted-foreground">
-                      {event.status === 'active' ? 'Started' : event.status === 'completed' ? 'Completed' : 'Event'} at {formatTime(event.startTime)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    });
-  };
 
   if (subagents.length === 0) {
     console.log('SubagentMonitor: No subagents, showSetup:', showSetup);
@@ -440,9 +622,6 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
     );
   }
 
-  // Build the prompt hierarchy
-  const promptHierarchy = buildPromptHierarchy(subagents, prompts, expandedNodes);
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -461,9 +640,14 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
                 if (expandedPromptCount === allPromptIds.length) {
                   // All expanded, collapse all
                   setExpandedNodes(new Set());
+                  userExpandedNodesRef.current.clear();
+                  autoExpandedNodesRef.current.clear();
                 } else {
                   // Some collapsed, expand all prompts (not individual nodes)
-                  setExpandedNodes(new Set(allPromptIds));
+                  const newExpanded = new Set(allPromptIds);
+                  setExpandedNodes(newExpanded);
+                  userExpandedNodesRef.current = new Set(allPromptIds);
+                  autoExpandedNodesRef.current.clear();
                 }
               }}
               className="flex items-center gap-1 px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
@@ -497,7 +681,7 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2" ref={scrollContainerRef}>
         {promptHierarchy.map((promptNode) => {
           // Check if this prompt has a "session completed" event
           const hasSessionCompleted = promptNode.events.some(
@@ -513,8 +697,12 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
                 const newExpanded = new Set(expandedNodes);
                 if (newExpanded.has(promptNode.prompt.promptId)) {
                   newExpanded.delete(promptNode.prompt.promptId);
+                  userExpandedNodesRef.current.delete(promptNode.prompt.promptId);
+                  autoExpandedNodesRef.current.delete(promptNode.prompt.promptId);
                 } else {
                   newExpanded.add(promptNode.prompt.promptId);
+                  userExpandedNodesRef.current.add(promptNode.prompt.promptId);
+                  autoExpandedNodesRef.current.delete(promptNode.prompt.promptId);
                 }
                 setExpandedNodes(newExpanded);
               }}
@@ -594,7 +782,16 @@ export function SubagentMonitor({ refreshInterval = 1000, selectedApp = 'code' }
             {expandedNodes.has(promptNode.prompt.promptId) && (
               <div className="space-y-2">
                 {/* Render task groups */}
-                {renderTaskGroups(promptNode.taskGroups, promptNode.prompt.promptId)}
+                {promptNode.taskGroups.map(({ taskGroup, expanded }) => (
+                  <MemoizedTaskGroup
+                    key={`${promptNode.prompt.promptId}-task-${taskGroup.description}`}
+                    taskGroup={taskGroup}
+                    promptId={promptNode.prompt.promptId}
+                    expandedNodes={expandedNodes}
+                    onToggleExpansion={handleToggleExpansion}
+                    onSelectSubagent={handleSelectSubagent}
+                  />
+                ))}
               </div>
             )}
           </div>
